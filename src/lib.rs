@@ -2,6 +2,8 @@ pub mod generate;
 pub mod json;
 pub mod json_ext;
 pub mod types;
+pub mod cache;
+pub mod request;
 
 #[cfg(test)]
 mod tests {

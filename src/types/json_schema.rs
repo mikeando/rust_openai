@@ -4,7 +4,7 @@ use crate::types::Error;
 use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct JSONSchema(serde_json::Value);
+pub struct JSONSchema(pub serde_json::Value);
 
 impl ToJson for JSONSchema {
     fn to_json(&self) -> serde_json::Value {
