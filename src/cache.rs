@@ -2,8 +2,10 @@ use data_encoding::HEXLOWER;
 use ring::digest;
 use serde_json::json;
 
-use crate::{json::{FromJson, ToJson}, types::{ChatCompletionObject, ChatRequest}};
-
+use crate::{
+    json::{FromJson, ToJson},
+    types::{ChatCompletionObject, ChatRequest},
+};
 
 pub trait Keyer<T, K> {
     fn key(&self, value: &T) -> K;
@@ -43,10 +45,10 @@ pub struct CacheEntry {
 
 impl Cache<String, CacheEntry> for DefaultFilesystemCache {
     fn get_value_if_cached(&self, key: &String) -> Option<CacheEntry> {
-        let cache_file_path = self.key_to_path(&key);
+        let cache_file_path = self.key_to_path(key);
 
         // Open and read the cache file if it exists
-        if let Ok(content) = std::fs::read_to_string(&cache_file_path) {
+        if let Ok(content) = std::fs::read_to_string(cache_file_path) {
             // Convert the content to json
             let value: serde_json::Value = serde_json::from_str(&content).unwrap();
             // Get the request
@@ -59,7 +61,7 @@ impl Cache<String, CacheEntry> for DefaultFilesystemCache {
     }
 
     fn cache_value(&mut self, key: &String, value: &CacheEntry) {
-        let cache_file_path = self.key_to_path(&key);
+        let cache_file_path = self.key_to_path(key);
 
         let cache_entry = json!({
             "request": value.request.to_json(),

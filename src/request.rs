@@ -1,6 +1,10 @@
 use reqwest::Client;
 
-use crate::{cache::{Cache, CacheEntry, DefaultFilesystemCache, DefaultSHA256FromChatRequest, Keyer}, json::{FromJson, ToJson}, types::{ChatCompletionObject, ChatRequest}};
+use crate::{
+    cache::{Cache, CacheEntry, DefaultFilesystemCache, DefaultSHA256FromChatRequest, Keyer},
+    json::{FromJson, ToJson},
+    types::{ChatCompletionObject, ChatRequest},
+};
 
 async fn make_uncached_request(
     request: &ChatRequest,
@@ -24,7 +28,10 @@ async fn make_uncached_request(
     response
 }
 
-pub async fn make_request(request: &ChatRequest, openai_api_key: &str) -> (ChatCompletionObject, bool) {
+pub async fn make_request(
+    request: &ChatRequest,
+    openai_api_key: &str,
+) -> (ChatCompletionObject, bool) {
     // First check if we have a cached result
     let key = DefaultSHA256FromChatRequest {}.key(request);
 
