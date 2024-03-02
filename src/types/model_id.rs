@@ -9,6 +9,7 @@ use serde_json::json;
 pub enum ModelId {
     Gpt35Turbo,
     Gpt35Turbo0613,
+    Gpt35Turbo0125,
 }
 
 impl ModelId {
@@ -16,6 +17,7 @@ impl ModelId {
         match self {
             ModelId::Gpt35Turbo => String::from("gpt-3.5-turbo"),
             ModelId::Gpt35Turbo0613 => String::from("gpt-3.5-turbo-0613"),
+            ModelId::Gpt35Turbo0125 => String::from("gpt-3.5-turbo-0125"),
         }
     }
 
@@ -27,6 +29,7 @@ impl ModelId {
         match name {
             "gpt-3.5-turbo" => Ok(ModelId::Gpt35Turbo),
             "gpt-3.5-turbo-0613" => Ok(ModelId::Gpt35Turbo0613),
+            "gpt-3.5-turbo-0125" => Ok(ModelId::Gpt35Turbo0125),
             _ => Err(Error::InvalidModelName),
         }
     }
