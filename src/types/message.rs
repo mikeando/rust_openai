@@ -43,6 +43,14 @@ impl Message {
             None
         }
     }
+
+    pub fn to_assistant_message(self) -> Option<AssistantMessage> {
+        if let Self::AssistantMessage(mesg) = self {
+            Some(mesg)
+        } else {
+            None
+        }
+    }
 }
 
 impl ToJson for Message {
