@@ -62,6 +62,12 @@ impl ChatRequest {
         result.tools = Some(tools);
         result
     }
+
+    pub fn with_max_tokens(self, max_tokens: Option<u32>) -> ChatRequest {
+        let mut result = self;
+        result.max_tokens = max_tokens;
+        result
+    }
 }
 
 impl ToJson for ChatRequest {
