@@ -4,6 +4,7 @@ pub mod json;
 pub mod json_ext;
 pub mod request;
 pub mod types;
+pub mod embedding;
 
 #[cfg(test)]
 mod tests {
