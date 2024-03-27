@@ -22,7 +22,7 @@ async fn make_uncached_request(
         .unwrap();
 
     let response_text = response.text().await.unwrap();
-    eprintln!("---- raw response ---\n{}\n", response_text);
+    // eprintln!("---- raw response ---\n{}\n", response_text);
     let v: serde_json::Value = serde_json::from_str(&response_text).unwrap();
     let response: ChatCompletionObject = ChatCompletionObject::from_json(&v).unwrap();
     response

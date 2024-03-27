@@ -39,7 +39,7 @@ pub async fn make_uncached_embedding_request(
         .unwrap();
 
     let response_text = response.text().await.unwrap();
-    eprintln!("---- raw response ---\n{}\n", response_text);
+    // eprintln!("---- raw response ---\n{}\n", response_text);
     let v: serde_json::Value = serde_json::from_str(&response_text).unwrap();
     let r: Vec<f32> = v["data"][0]["embedding"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect();
     r
