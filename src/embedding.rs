@@ -18,10 +18,7 @@ impl ToJson for EmbeddingRequest {
 }
 
 //TODO: Add a caching layer like we use for completion requests.
-pub async fn make_uncached_embedding_request(
-    text: &str,
-    openai_api_key: &str,
-) -> Vec<f32> {
+pub async fn make_uncached_embedding_request(text: &str, openai_api_key: &str) -> Vec<f32> {
     let client = Client::new();
 
     let request = EmbeddingRequest {
@@ -41,6 +38,11 @@ pub async fn make_uncached_embedding_request(
     let response_text = response.text().await.unwrap();
     // eprintln!("---- raw response ---\n{}\n", response_text);
     let v: serde_json::Value = serde_json::from_str(&response_text).unwrap();
-    let r: Vec<f32> = v["data"][0]["embedding"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect();
+    let r: Vec<f32> = v["data"][0]["embedding"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap() as f32)
+        .collect();
     r
 }

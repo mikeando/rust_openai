@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let text = "Input text to embed, encoded as a string or array of tokens. To embed multiple inputs in a single request, pass an array of strings or array of token arrays. The input must not exceed the max input tokens for the model";
     let r = embedding::make_uncached_embedding_request(text, &openai_api_key).await;
-    
+
     println!("{:#?}", r);
 
     Ok(())
