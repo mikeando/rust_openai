@@ -15,6 +15,7 @@ ring = "0.17.7"
 data-encoding = "2.5.0"
 rand = "0.8"
 schemars = "0.8"
+snafu = "0.8"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
