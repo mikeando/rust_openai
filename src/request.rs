@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -28,7 +28,7 @@ impl OpenAILLM {
         let requester = OpenAIRawRequester { openai_api_key };
         let requester = Arc::new(AsyncMutex::new(requester));
         let fs = DefaultFS {};
-        let fs = Arc::new(Mutex::new(fs));
+        let fs = Arc::new(AsyncMutex::new(fs));
         let cache = DefaultRequestCache {
             fs,
             root: PathBuf::from("cache"),
@@ -76,38 +76,41 @@ impl RawRequester for OpenAIRawRequester {
     }
 }
 
+#[async_trait]
 pub trait RequestCache {
     //TODO: Use a better Result type!
-    fn get_response_if_cached(
+    async fn get_response_if_cached(
         &self,
         request: &ChatRequest,
     ) -> anyhow::Result<Option<ChatCompletionObject>>;
-    fn cache_response(
+    async fn cache_response(
         &mut self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
     ) -> anyhow::Result<()>;
 }
 
+#[async_trait]
 pub trait TrivialFS {
-    fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
-    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
+    async fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
+    async fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
 }
 
 pub struct DefaultFS {}
 
+#[async_trait]
 impl TrivialFS for DefaultFS {
-    fn read_to_string(&self, p: &Path) -> anyhow::Result<String> {
+    async fn read_to_string(&self, p: &Path) -> anyhow::Result<String> {
         Ok(std::fs::read_to_string(p)?)
     }
-    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()> {
+    async fn write(&self, p: &Path, value: &str) -> anyhow::Result<()> {
         std::fs::write(p, value)?;
         Ok(())
     }
 }
 
 pub struct DefaultRequestCache {
-    fs: Arc<Mutex<dyn TrivialFS + Send>>,
+    fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
     root: PathBuf,
 }
 
@@ -127,8 +130,9 @@ impl DefaultRequestCache {
     }
 }
 
+#[async_trait]
 impl RequestCache for DefaultRequestCache {
-    fn get_response_if_cached(
+    async fn get_response_if_cached(
         &self,
         request: &ChatRequest,
     ) -> anyhow::Result<Option<ChatCompletionObject>> {
@@ -138,7 +142,7 @@ impl RequestCache for DefaultRequestCache {
         let cache_file_path = self.key_to_path(&key);
 
         // Open and read the cache file if it exists
-        if let Ok(content) = self.fs.lock().unwrap().read_to_string(&cache_file_path) {
+        if let Ok(content) = self.fs.lock().await.read_to_string(&cache_file_path).await {
             // Convert the content to json
             let value: serde_json::Value = serde_json::from_str(&content)?;
             // Get the request
@@ -155,7 +159,7 @@ impl RequestCache for DefaultRequestCache {
         }
     }
 
-    fn cache_response(
+    async fn cache_response(
         &mut self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
@@ -171,11 +175,12 @@ impl RequestCache for DefaultRequestCache {
 
         self.fs
             .lock()
-            .unwrap()
+            .await
             .write(
                 &cache_file_path,
                 &serde_json::to_string_pretty(&cache_entry).unwrap(),
             )
+            .await
             .unwrap();
 
         Ok(())
@@ -190,6 +195,7 @@ impl OpenAILLM {
             .lock()
             .await
             .get_response_if_cached(request)
+            .await
             .unwrap()
         {
             return (v, true);
@@ -209,6 +215,7 @@ impl OpenAILLM {
             .lock()
             .await
             .cache_response(request, &response)
+            .await
             .unwrap();
 
         (response, false)
