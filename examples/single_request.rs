@@ -1,4 +1,4 @@
-use rust_openai::request::make_request;
+use rust_openai::request::OpenAILLM;
 use tokio;
 
 use rust_openai::types::{ChatRequest, Message, ModelId};
@@ -9,6 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     eprintln!("{:?}", openai_api_key);
+    let mut llm = OpenAILLM::with_defaults(&openai_api_key);
 
     let request: ChatRequest = ChatRequest::new(
         ModelId::Gpt35Turbo,
@@ -18,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let (response, is_from_cache) = make_request(&request, &openai_api_key).await;
+    let (response, is_from_cache) = llm.make_request(&request).await;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);

@@ -37,10 +37,7 @@ impl FromJson for AssistantMessage {
                 .map(ToolCall::from_json)
                 .collect::<Result<Vec<_>, _>>()
         });
-        let tool_calls = match tool_calls {
-            None => None,
-            Some(v) => Some(v.unwrap()),
-        };
+        let tool_calls = tool_calls.map(|v| v.unwrap());
         Ok(AssistantMessage {
             name: v["name"].as_str().map(|s| s.to_string()),
             content: v["content"].as_str().map(|s| s.to_string()),

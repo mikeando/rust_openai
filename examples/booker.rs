@@ -1,11 +1,9 @@
 use rust_openai::{
-    json::ToJson,
-    request::make_request,
+    request::OpenAILLM,
     types::{JSONSchema, Tool},
 };
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio;
 
 use std::fmt::Write;
@@ -42,6 +40,7 @@ struct SectionOutline {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
+    let mut llm = OpenAILLM::with_defaults(&openai_api_key);
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
 
@@ -58,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             parameters: Some(schema2),
         }]);
 
-    let (response, is_from_cache) = make_request(&request, &openai_api_key).await;
+    let (response, is_from_cache) = llm.make_request(&request).await;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);
@@ -80,8 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut overview = String::new();
     for (i, c) in args.chapters.iter().enumerate() {
-        writeln!(overview, "Chapter {}: {} -- {}", i + 1, c.title, c.subtitle);
-        writeln!(overview, "{}\n", c.overview);
+        writeln!(overview, "Chapter {}: {} -- {}", i + 1, c.title, c.subtitle).unwrap();
+        writeln!(overview, "{}\n", c.overview).unwrap();
     }
     println!("{}", overview);
 
@@ -93,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let (response, is_from_cache) = make_request(&request, &openai_api_key).await;
+    let (response, is_from_cache) = llm.make_request(&request).await;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);
@@ -129,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 parameters: Some(schema2.clone()),
             }]);
 
-        let (response, is_from_cache) = make_request(&request, &openai_api_key).await;
+        let (response, _is_from_cache) = llm.make_request(&request).await;
 
         let rew_response_object = &response.choices[0]
             .message
