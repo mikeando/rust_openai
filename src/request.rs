@@ -110,8 +110,8 @@ impl TrivialFS for DefaultFS {
 }
 
 pub struct DefaultRequestCache {
-    fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
-    root: PathBuf,
+    pub fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
+    pub root: PathBuf,
 }
 
 impl DefaultRequestCache {
