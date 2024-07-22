@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             parameters: Some(schema2),
         }]);
 
-    let (response, is_from_cache) = llm.make_request(&request).await;
+    let (response, is_from_cache) = llm.make_request(&request).await?;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let (response, is_from_cache) = llm.make_request(&request).await;
+    let (response, is_from_cache) = llm.make_request(&request).await?;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 parameters: Some(schema2.clone()),
             }]);
 
-        let (response, _is_from_cache) = llm.make_request(&request).await;
+        let (response, _is_from_cache) = llm.make_request(&request).await?;
 
         let rew_response_object = &response.choices[0]
             .message

@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use data_encoding::HEXLOWER;
 use reqwest::Client;
@@ -47,7 +47,10 @@ impl OpenAILLM {
 
 #[async_trait]
 pub trait RawRequester {
-    async fn make_uncached_request(&mut self, request: &ChatRequest) -> ChatCompletionObject;
+    async fn make_uncached_request(
+        &mut self,
+        request: &ChatRequest,
+    ) -> anyhow::Result<ChatCompletionObject>;
 }
 
 pub struct OpenAIRawRequester {
@@ -56,7 +59,10 @@ pub struct OpenAIRawRequester {
 
 #[async_trait]
 impl RawRequester for OpenAIRawRequester {
-    async fn make_uncached_request(&mut self, request: &ChatRequest) -> ChatCompletionObject {
+    async fn make_uncached_request(
+        &mut self,
+        request: &ChatRequest,
+    ) -> anyhow::Result<ChatCompletionObject> {
         let client = Client::new();
 
         let response = client
@@ -65,14 +71,20 @@ impl RawRequester for OpenAIRawRequester {
             .header("Authorization", format!("Bearer {}", self.openai_api_key))
             .json(&request.to_json())
             .send()
-            .await
-            .unwrap();
+            .await?;
 
-        let response_text = response.text().await.unwrap();
-        // eprintln!("---- raw response ---\n{}\n", response_text);
-        let v: serde_json::Value = serde_json::from_str(&response_text).unwrap();
-        let response: ChatCompletionObject = ChatCompletionObject::from_json(&v).unwrap();
-        response
+        if !response.status().is_success() {
+            bail!(
+                "Error making openai request: {}",
+                response.status().as_str()
+            );
+        }
+
+        let response_text = response.text().await?;
+        let v: serde_json::Value = serde_json::from_str(&response_text)?;
+        let response: ChatCompletionObject = ChatCompletionObject::from_json(&v)
+            .map_err(|e| anyhow!("Error decoding openai response: {:?}", e))?;
+        Ok(response)
     }
 }
 
@@ -188,7 +200,10 @@ impl RequestCache for DefaultRequestCache {
 }
 
 impl OpenAILLM {
-    pub async fn make_request(&mut self, request: &ChatRequest) -> (ChatCompletionObject, bool) {
+    pub async fn make_request(
+        &mut self,
+        request: &ChatRequest,
+    ) -> anyhow::Result<(ChatCompletionObject, bool)> {
         // First check if we have a cached result
         if let Some(v) = self
             .cache
@@ -198,7 +213,7 @@ impl OpenAILLM {
             .await
             .unwrap()
         {
-            return (v, true);
+            return Ok((v, true));
         }
 
         // There is no cache value!
@@ -208,16 +223,15 @@ impl OpenAILLM {
             .lock()
             .await
             .make_uncached_request(request)
-            .await;
+            .await?;
 
         // Cache it for next time
         self.cache
             .lock()
             .await
             .cache_response(request, &response)
-            .await
-            .unwrap();
+            .await?;
 
-        (response, false)
+        Ok((response, false))
     }
 }

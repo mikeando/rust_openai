@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let (response, is_from_cache) = llm.make_request(&request).await;
+    let (response, is_from_cache) = llm.make_request(&request).await?;
 
     println!("is from cache: {}", is_from_cache);
     println!("{:#?}", response);
