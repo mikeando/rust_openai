@@ -41,11 +41,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     let mut llm = OpenAILLM::with_defaults(&openai_api_key);
+    let model_id = ModelId::Gpt4oMini;
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt35Turbo,
+        model_id,
         vec![
             Message::system_message("You are a an expert book authoring AI."),
             Message::user_message("Generate a outline for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills."),
@@ -85,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", overview);
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt35Turbo,
+        model_id,
         vec![
             Message::system_message("You are a an expert book authoring AI."),
             Message::user_message(format!("Generate a one paragraph description for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills.\n\n{}", overview)),
@@ -116,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("processing chapter {}", chapter_index);
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            model_id,
             vec![
                 Message::system_message("You are a an expert book authoring AI."),
                 Message::user_message(format!("Create a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}\n\n{}\n", chapter_index, summary, overview )),

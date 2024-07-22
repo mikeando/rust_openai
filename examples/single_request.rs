@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut llm = OpenAILLM::with_defaults(&openai_api_key);
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt35Turbo,
+        ModelId::Gpt4oMini,
         vec![
             Message::system_message("You are a helpful assistant."),
             Message::user_message("Hello!"),
