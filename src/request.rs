@@ -23,18 +23,15 @@ pub struct OpenAILLM {
 }
 
 impl OpenAILLM {
-    pub fn with_defaults(openai_api_key: &str) -> OpenAILLM {
+    pub async fn with_defaults(openai_api_key: &str) -> anyhow::Result<OpenAILLM> {
         let openai_api_key = openai_api_key.to_string();
         let requester = OpenAIRawRequester { openai_api_key };
         let requester = Arc::new(AsyncMutex::new(requester));
         let fs = DefaultFS {};
         let fs = Arc::new(AsyncMutex::new(fs));
-        let cache = DefaultRequestCache {
-            fs,
-            root: PathBuf::from("cache"),
-        };
+        let cache = DefaultRequestCache::new(fs, PathBuf::from("cache")).await?;
         let cache = Arc::new(AsyncMutex::new(cache));
-        OpenAILLM::new(requester, cache)
+        Ok(OpenAILLM::new(requester, cache))
     }
 
     pub fn new(
@@ -102,10 +99,18 @@ pub trait RequestCache {
     ) -> anyhow::Result<()>;
 }
 
+#[derive(Debug, PartialEq)]
+pub enum TrivialFSPathType {
+    NoSuchPath,
+    File,
+    Directory,
+}
+
 #[async_trait]
 pub trait TrivialFS {
     async fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
     async fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
+    async fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType>;
 }
 
 pub struct DefaultFS {}
@@ -119,14 +124,53 @@ impl TrivialFS for DefaultFS {
         std::fs::write(p, value)?;
         Ok(())
     }
+    async fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType> {
+        use std::io::ErrorKind;
+
+        let r = std::fs::metadata(p);
+        match r {
+            Ok(metadata) => {
+                if metadata.is_file() {
+                    Ok(TrivialFSPathType::File)
+                } else if metadata.is_dir() {
+                    Ok(TrivialFSPathType::Directory)
+                } else {
+                    Err(anyhow!(
+                        "path_type failed: '{}' is an invalid path type",
+                        p.display()
+                    ))
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(TrivialFSPathType::NoSuchPath),
+            Err(e) => Err(anyhow!(
+                "path_type failed when stating {}:  {}",
+                p.display(),
+                e
+            )),
+        }
+    }
 }
 
 pub struct DefaultRequestCache {
-    pub fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
-    pub root: PathBuf,
+    fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
+    root: PathBuf,
 }
 
 impl DefaultRequestCache {
+    async fn new(
+        fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
+        root: PathBuf,
+    ) -> anyhow::Result<DefaultRequestCache> {
+        let r = fs.lock().await.path_type(&root).await?;
+        if r != TrivialFSPathType::Directory {
+            bail!(
+                "DefaultRrequestCache::new failed - '{}' is not a directory",
+                root.display()
+            );
+        }
+        Ok(DefaultRequestCache { fs, root })
+    }
+
     fn key(&self, value: &ChatRequest) -> String {
         let request_json = value.to_json();
         let request_str = request_json.to_string();
