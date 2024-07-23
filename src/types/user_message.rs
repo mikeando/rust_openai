@@ -9,6 +9,15 @@ pub struct UserMessage {
     pub name: Option<String>,
 }
 
+impl UserMessage {
+    pub fn new<T: Into<String>>(content: T) -> UserMessage {
+        UserMessage {
+            content: content.into(),
+            name: None,
+        }
+    }
+}
+
 impl ToJson for UserMessage {
     fn to_json(&self) -> serde_json::Value {
         let mut v = json!({

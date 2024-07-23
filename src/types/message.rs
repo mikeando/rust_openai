@@ -77,6 +77,30 @@ impl FromJson for Message {
     }
 }
 
+impl From<AssistantMessage> for Message {
+    fn from(value: AssistantMessage) -> Self {
+        Message::AssistantMessage(value)
+    }
+}
+
+impl From<UserMessage> for Message {
+    fn from(value: UserMessage) -> Self {
+        Message::UserMessage(value)
+    }
+}
+
+impl From<ToolMessage> for Message {
+    fn from(value: ToolMessage) -> Self {
+        Message::ToolMessage(value)
+    }
+}
+
+impl From<SystemMessage> for Message {
+    fn from(value: SystemMessage) -> Self {
+        Message::SystemMessage(value)
+    }
+}
+
 impl Generatable for Message {
     fn gen(context: &mut GeneratorContext) -> Self {
         // Pick the enum type

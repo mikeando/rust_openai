@@ -9,6 +9,15 @@ pub struct SystemMessage {
     pub name: Option<String>,
 }
 
+impl SystemMessage {
+    pub fn new<T: Into<String>>(content: T) -> SystemMessage {
+        SystemMessage {
+            content: content.into(),
+            name: None,
+        }
+    }
+}
+
 impl ToJson for SystemMessage {
     fn to_json(&self) -> serde_json::Value {
         let mut v = json!({
