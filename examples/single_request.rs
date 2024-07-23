@@ -1,5 +1,4 @@
 use rust_openai::request::OpenAILLM;
-use tokio;
 
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;

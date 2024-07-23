@@ -1,7 +1,6 @@
 use std::env;
 
 use rust_openai::embedding;
-use tokio;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

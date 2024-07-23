@@ -4,7 +4,6 @@ use rust_openai::{
 };
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
-use tokio;
 
 use std::fmt::Write;
 
