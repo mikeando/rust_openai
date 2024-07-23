@@ -167,7 +167,7 @@ pub struct DefaultRequestCache {
 }
 
 impl DefaultRequestCache {
-    async fn new(
+    pub async fn new(
         fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
         root: PathBuf,
     ) -> anyhow::Result<DefaultRequestCache> {
