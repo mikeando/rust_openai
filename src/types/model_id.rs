@@ -74,6 +74,6 @@ impl Generatable for ModelId {
     fn gen(context: &mut GeneratorContext) -> Self {
         let values = Self::values();
         let i = context.rng.gen_range(0..values.len());
-        values[i].clone()
+        values[i]
     }
 }
