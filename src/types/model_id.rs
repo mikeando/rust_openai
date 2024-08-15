@@ -14,6 +14,7 @@ pub enum ModelId {
     // $5.00/15.00 per M in/out
     Gpt4o,
     Gpt4o20240513,
+    Gpt4o20240806,
     // $0.15/0.60 per M in/out
     Gpt4oMini,
     Gpt4oMini20240718,
@@ -27,6 +28,7 @@ impl ModelId {
             ModelId::Gpt35Turbo0125 => String::from("gpt-3.5-turbo-0125"),
             ModelId::Gpt4o => String::from("gpt-4o"),
             ModelId::Gpt4o20240513 => String::from("gpt-4o-2024-05-13"),
+            ModelId::Gpt4o20240806 => String::from("gpt-4o-2024-08-06"),
             ModelId::Gpt4oMini => String::from("gpt-4o-mini"),
             ModelId::Gpt4oMini20240718 => String::from("gpt-4o-mini-2024-07-18"),
         }
@@ -39,6 +41,7 @@ impl ModelId {
             ModelId::Gpt35Turbo0125,
             ModelId::Gpt4o,
             ModelId::Gpt4o20240513,
+            ModelId::Gpt4o20240806,
             ModelId::Gpt4oMini,
             ModelId::Gpt4oMini20240718,
         ]
@@ -51,6 +54,7 @@ impl ModelId {
             "gpt-3.5-turbo-0125" => Ok(ModelId::Gpt35Turbo0125),
             "gpt-4o" => Ok(ModelId::Gpt4o),
             "gpt-4o-2024-05-13" => Ok(ModelId::Gpt4o20240513),
+            "gpt-4o-2024-08-06" => Ok(ModelId::Gpt4o20240806),
             "gpt-4o-mini" => Ok(ModelId::Gpt4oMini),
             "gpt-4o-mini-2024-07-18" => Ok(ModelId::Gpt4oMini20240718),
             _ => Err(Error::InvalidModelName),
