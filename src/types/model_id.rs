@@ -18,6 +18,12 @@ pub enum ModelId {
     // $0.15/0.60 per M in/out
     Gpt4oMini,
     Gpt4oMini20240718,
+    // Frontier Models
+    Gpt5,
+    Gpt5Mini,
+    Gpt5Nano,
+    Gpt5Pro,
+    Gpt41,
 }
 
 impl ModelId {
@@ -31,6 +37,11 @@ impl ModelId {
             ModelId::Gpt4o20240806 => String::from("gpt-4o-2024-08-06"),
             ModelId::Gpt4oMini => String::from("gpt-4o-mini"),
             ModelId::Gpt4oMini20240718 => String::from("gpt-4o-mini-2024-07-18"),
+            ModelId::Gpt5 => String::from("gpt-5"),
+            ModelId::Gpt5Mini => String::from("gpt-5-mini"),
+            ModelId::Gpt5Nano => String::from("gpt-5-nano"),
+            ModelId::Gpt5Pro => String::from("gpt-5-pro"),
+            ModelId::Gpt41 => String::from("gpt-4.1"),
         }
     }
 
@@ -44,6 +55,11 @@ impl ModelId {
             ModelId::Gpt4o20240806,
             ModelId::Gpt4oMini,
             ModelId::Gpt4oMini20240718,
+            ModelId::Gpt5,
+            ModelId::Gpt5Mini,
+            ModelId::Gpt5Nano,
+            ModelId::Gpt5Pro,
+            ModelId::Gpt41,
         ]
     }
 
@@ -57,6 +73,11 @@ impl ModelId {
             "gpt-4o-2024-08-06" => Ok(ModelId::Gpt4o20240806),
             "gpt-4o-mini" => Ok(ModelId::Gpt4oMini),
             "gpt-4o-mini-2024-07-18" => Ok(ModelId::Gpt4oMini20240718),
+            "gpt-5" => Ok(ModelId::Gpt5),
+            "gpt-5-mini" => Ok(ModelId::Gpt5Mini),
+            "gpt-5-nano" => Ok(ModelId::Gpt5Nano),
+            "gpt-5-pro" => Ok(ModelId::Gpt5Pro),
+            "gpt-4.1" => Ok(ModelId::Gpt41),
             _ => Err(Error::InvalidModelName),
         }
     }
