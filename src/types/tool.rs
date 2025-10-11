@@ -35,18 +35,24 @@ impl ToJson for Tool {
 
 impl FromJson for Tool {
     fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
-        let f = v["function"]
-            .as_object()
+        let f = v
+            .get("function")
+            .and_then(|v| v.as_object())
             .with_context(|| "missing function in tool")?;
         Ok(Tool {
-            description: f["description"]
+            description: f
+                .get("description")
+                .unwrap_or(&serde_json::Value::Null)
                 .to_opt_string()
                 .with_context(|| "missing or invalid function.description in tool")?,
-            name: f["name"]
-                .as_str()
+            name: f
+                .get("name")
+                .and_then(|v| v.as_str())
                 .context("missing or invalid function.name field in tool")?
                 .to_string(),
-            parameters: f["parameters"]
+            parameters: f
+                .get("parameters")
+                .unwrap_or(&serde_json::Value::Null)
                 .map_opt(JSONSchema::from_json)
                 .context("missing or invalid function.parameters field in tool")?,
         })
