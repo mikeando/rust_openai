@@ -3,7 +3,6 @@ use crate::json::{FromJson, ToJson};
 use crate::json_ext::JsonValueExt;
 use crate::types::Error;
 use crate::types::JSONSchema;
-use anyhow::Context;
 use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,20 +34,20 @@ impl ToJson for Tool {
 
 impl FromJson for Tool {
     fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
-        let f = v["function"]
-            .as_object()
-            .with_context(|| "missing function in tool")?;
+        let f = v["function"].as_object().ok_or(Error::InvalidJsonStructure)?;
         Ok(Tool {
-            description: f["description"]
-                .to_opt_string()
-                .with_context(|| "missing or invalid function.description in tool")?,
-            name: f["name"]
-                .as_str()
-                .context("missing or invalid function.name field in tool")?
+            description: f.get("description")
+                .map(|v| v.to_opt_string())
+                // transpose will swap the Option and Result, so we have a Result<Option<Option<String>>, Error>
+                .transpose()?
+                .flatten(),
+            name: f.get("name")
+                .and_then(|v| v.as_str())
+                .ok_or(Error::InvalidJsonStructure)?
                 .to_string(),
-            parameters: f["parameters"]
-                .map_opt(JSONSchema::from_json)
-                .context("missing or invalid function.parameters field in tool")?,
+            parameters: f.get("parameters")
+                .map(|v| JSONSchema::from_json(v))
+                .transpose()?,
         })
     }
 }

@@ -25,6 +25,8 @@ pub use chat_request::ChatRequest;
 pub use error::Error;
 pub use finish_reason::FinishReason;
 pub use json_schema::JSONSchema;
+pub mod json_schema_prop;
+pub use json_schema_prop::JsonSchemaProp;
 pub use logit_bias::LogitBias;
 pub use message::Message;
 pub use model_id::ModelId;

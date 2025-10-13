@@ -10,6 +10,7 @@ pub enum Error {
     JsonExpectedI64,
     JsonExpectedF64,
     JsonExpectedString,
+    JsonExpectedBool,
     Wrapped(anyhow::Error),
 }
 

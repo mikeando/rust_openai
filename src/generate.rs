@@ -13,6 +13,12 @@ impl Generatable for String {
     }
 }
 
+impl Generatable for bool {
+    fn gen(context: &mut GeneratorContext) -> Self {
+        context.rng.gen()
+    }
+}
+
 impl<T> Generatable for Option<T>
 where
     T: Generatable,
