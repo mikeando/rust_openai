@@ -7,6 +7,8 @@ use crate::types::Error;
 use crate::types::{LogitBias, Message, ModelId, ResponseFormat, Tool, ToolChoice};
 use rand::Rng;
 use serde_json::json;
+use crate::llm::openai::OpenAIModelId;
+use crate::llm::claude::ClaudeModelId;
 
 use std::collections::BTreeMap;
 
@@ -73,7 +75,7 @@ impl ChatRequest {
 impl ToJson for ChatRequest {
     fn to_json(&self) -> serde_json::Value {
         let mut v: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-        v.insert("model".to_string(), json!(self.model.name()));
+        v.insert("model".to_string(), self.model.to_json());
         v.insert(
             "messages".to_string(),
             serde_json::Value::Array(self.messages.iter().map(|m| m.to_json()).collect()),
@@ -148,6 +150,16 @@ impl FromJson for ChatRequest {
             tool_choice: v["tool_choice"].map_opt(ToolChoice::from_json)?,
             user: v["user"].to_opt_string()?,
         })
+    }
+}
+
+impl Generatable for ModelId {
+    fn gen(context: &mut GeneratorContext) -> Self {
+        if context.rng.gen() {
+            ModelId::OpenAI(context.gen())
+        } else {
+            ModelId::Claude(context.gen())
+        }
     }
 }
 
