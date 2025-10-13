@@ -1,17 +1,17 @@
-use async_trait::async_trait;
 use reqwest::Client;
 use anyhow::{anyhow, bail};
+use std::sync::Arc;
 
 use crate::{
     json::FromJson,
     types::{ChatCompletionObject, ChatRequest},
 };
 use crate::json::ToJson;
-use super::client::RawRequester;
 use crate::generate::{Generatable, GeneratorContext};
 use crate::types::Error;
 use rand::Rng;
 use serde_json::json;
+use crate::llm::RequestCache;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum OpenAIModelId {
@@ -87,31 +87,66 @@ impl Generatable for OpenAIModelId {
     }
 }
 
+use crate::llm::{DefaultRequestCache, DefaultFS};
+
+pub struct OpenAILlm {
+    model: OpenAIModelId,
+    requester: OpenAIRawRequester,
+    cache: DefaultRequestCache,
+}
+
+impl OpenAILlm {
+    pub async fn new(openai_api_key: &str, model: OpenAIModelId) -> anyhow::Result<Self> {
+        let requester = OpenAIRawRequester {
+            openai_api_key: openai_api_key.to_string(),
+        };
+        let fs = DefaultFS {};
+        let cache = DefaultRequestCache::new(Arc::new(fs), std::path::PathBuf::from("cache")).await?;
+        Ok(Self {
+            model,
+            requester,
+            cache,
+        })
+    }
+
+    pub async fn make_request(
+        &mut self,
+        request: &ChatRequest,
+    ) -> anyhow::Result<(ChatCompletionObject, bool)> {
+        if let Some(v) = self.cache.get_response_if_cached(request).await? {
+            return Ok((v, true));
+        }
+
+        let response = self.requester.make_uncached_request(request, &self.model).await?;
+        self.cache.cache_response(request, &response).await?;
+        Ok((response, false))
+    }
+}
+
 pub struct OpenAIRawRequester {
     pub openai_api_key: String,
 }
 
-#[async_trait]
-impl RawRequester for OpenAIRawRequester {
-    async fn make_uncached_request(
+impl OpenAIRawRequester {
+    pub async fn make_uncached_request(
         &mut self,
         request: &ChatRequest,
+        model: &OpenAIModelId,
     ) -> anyhow::Result<ChatCompletionObject> {
         let client = Client::new();
+        let mut full_request = request.to_json();
+        full_request["model"] = model.to_json();
 
         let response = client
             .post("https://api.openai.com/v1/chat/completions")
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.openai_api_key))
-            .json(&request.to_json())
+            .json(&full_request)
             .send()
             .await?;
 
         let status = response.status();
         if !status.is_success() {
-            // Try and see if we can divine the reason from the JSON,
-            // if we get any...
-            // TODO: If this doesn't work we should at least return what we do know
             let response_text = response.text().await?;
             let v: serde_json::Value = serde_json::from_str(&response_text)?;
             let error_message = &v["error"]["message"];

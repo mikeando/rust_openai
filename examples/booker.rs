@@ -1,6 +1,5 @@
 use rust_openai::{
-    llm::GenericLLM,
-    llm::openai::OpenAIModelId,
+    llm::openai::{OpenAILlm, OpenAIModelId},
     types::{JSONSchema, Tool},
 };
 use schemars::{schema_for, JsonSchema};
@@ -8,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::fmt::Write;
 
-use rust_openai::types::{ChatRequest, Message, ModelId};
+use rust_openai::types::{ChatRequest, Message};
 use std::env;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -40,13 +39,11 @@ struct SectionOutline {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
-    let mut llm = GenericLLM::with_defaults(&openai_api_key).await?;
-    let model_id = ModelId::OpenAI(OpenAIModelId::Gpt4oMini);
+    let mut llm = OpenAILlm::new(&openai_api_key, OpenAIModelId::Gpt4oMini).await?;
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
 
     let request: ChatRequest = ChatRequest::new(
-        model_id.clone(),
         vec![
             Message::system_message("You are a an expert book authoring AI."),
             Message::user_message("Generate a outline for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills."),
@@ -86,7 +83,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", overview);
 
     let request: ChatRequest = ChatRequest::new(
-        model_id.clone(),
         vec![
             Message::system_message("You are a an expert book authoring AI."),
             Message::user_message(format!("Generate a one paragraph description for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills.\n\n{}", overview)),
@@ -117,7 +113,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("processing chapter {}", chapter_index);
 
         let request: ChatRequest = ChatRequest::new(
-            model_id.clone(),
             vec![
                 Message::system_message("You are a an expert book authoring AI."),
                 Message::user_message(format!("Create a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}\n\n{}\n", chapter_index, summary, overview )),

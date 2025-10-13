@@ -15,7 +15,6 @@ use std::collections::BTreeMap;
 /// TODO: Extract logit_bias as own struct.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatRequest {
-    pub model: ModelId,
     pub messages: Vec<Message>,
     pub frequency_penalty: Option<f32>,
     pub logit_bias: Option<LogitBias>,
@@ -33,9 +32,8 @@ pub struct ChatRequest {
 }
 
 impl ChatRequest {
-    pub fn new(model: ModelId, messages: Vec<Message>) -> ChatRequest {
+    pub fn new(messages: Vec<Message>) -> ChatRequest {
         ChatRequest {
-            model,
             messages,
             frequency_penalty: None,
             logit_bias: None,
@@ -75,7 +73,6 @@ impl ChatRequest {
 impl ToJson for ChatRequest {
     fn to_json(&self) -> serde_json::Value {
         let mut v: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-        v.insert("model".to_string(), self.model.to_json());
         v.insert(
             "messages".to_string(),
             serde_json::Value::Array(self.messages.iter().map(|m| m.to_json()).collect()),
@@ -130,7 +127,6 @@ impl ToJson for ChatRequest {
 impl FromJson for ChatRequest {
     fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
         Ok(ChatRequest {
-            model: ModelId::from_json(&v["model"])?,
             messages: v["messages"].flat_map_array(Message::from_json)?,
             frequency_penalty: v["frequency_penalty"].to_opt_f32()?,
             logit_bias: v["logit_bias"].map_opt_obj(LogitBias::from_json)?,
@@ -153,20 +149,9 @@ impl FromJson for ChatRequest {
     }
 }
 
-impl Generatable for ModelId {
-    fn gen(context: &mut GeneratorContext) -> Self {
-        if context.rng.gen() {
-            ModelId::OpenAI(context.gen())
-        } else {
-            ModelId::Claude(context.gen())
-        }
-    }
-}
-
 impl Generatable for ChatRequest {
     fn gen(context: &mut GeneratorContext) -> Self {
         ChatRequest {
-            model: context.gen(),
             messages: gen_vec(context, 0, 4),
             frequency_penalty: context.rng.gen(),
             logit_bias: context.gen(),

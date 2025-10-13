@@ -1,15 +1,14 @@
-use async_trait::async_trait;
 use anyhow::bail;
 
 use crate::{
     types::{ChatCompletionObject, ChatRequest},
 };
-use super::client::RawRequester;
 use crate::generate::{Generatable, GeneratorContext};
 use crate::json::{FromJson, ToJson};
 use crate::types::Error;
 use rand::Rng;
 use serde_json::json;
+use crate::llm::RequestCache;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ClaudeModelId {
@@ -61,13 +60,52 @@ impl Generatable for ClaudeModelId {
     }
 }
 
-pub struct ClaudeRawRequester {}
+use crate::llm::{DefaultRequestCache, DefaultFS};
+use std::sync::Arc;
 
-#[async_trait]
-impl RawRequester for ClaudeRawRequester {
-    async fn make_uncached_request(
+pub struct ClaudeLlm {
+    model: ClaudeModelId,
+    requester: ClaudeRawRequester,
+    cache: DefaultRequestCache,
+}
+
+impl ClaudeLlm {
+    pub async fn new(claude_api_key: &str, model: ClaudeModelId) -> anyhow::Result<Self> {
+        let requester = ClaudeRawRequester {
+            claude_api_key: claude_api_key.to_string(),
+        };
+        let fs = DefaultFS {};
+        let cache = DefaultRequestCache::new(Arc::new(fs), std::path::PathBuf::from("cache")).await?;
+        Ok(Self {
+            model,
+            requester,
+            cache,
+        })
+    }
+
+    pub async fn make_request(
+        &mut self,
+        request: &ChatRequest,
+    ) -> anyhow::Result<(ChatCompletionObject, bool)> {
+        if let Some(v) = self.cache.get_response_if_cached(request).await? {
+            return Ok((v, true));
+        }
+
+        let response = self.requester.make_uncached_request(request, &self.model).await?;
+        self.cache.cache_response(request, &response).await?;
+        Ok((response, false))
+    }
+}
+
+pub struct ClaudeRawRequester {
+    pub claude_api_key: String,
+}
+
+impl ClaudeRawRequester {
+    pub async fn make_uncached_request(
         &mut self,
         _request: &ChatRequest,
+        _model: &ClaudeModelId,
     ) -> anyhow::Result<ChatCompletionObject> {
         bail!("ClaudeRawRequester is not implemented yet")
     }

@@ -15,11 +15,9 @@ mod tests {
 
     use pretty_assertions::{assert_eq, assert_ne};
 
-use crate::llm::openai::OpenAIModelId;
     #[test]
     fn request_to_string() {
         let request: ChatRequest = ChatRequest::new(
-            ModelId::OpenAI(OpenAIModelId::Gpt35Turbo),
             vec![
                 Message::system_message("You are a helpful assistant."),
                 Message::user_message("Hello!"),
@@ -28,7 +26,6 @@ use crate::llm::openai::OpenAIModelId;
 
         let expected = r#"
           {
-            "model": "gpt-3.5-turbo",
             "messages": [
               {
                 "role": "system",
@@ -64,7 +61,6 @@ use crate::llm::openai::OpenAIModelId;
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::OpenAI(OpenAIModelId::Gpt35Turbo),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -76,7 +72,6 @@ use crate::llm::openai::OpenAIModelId;
 
         let expected = r#"
           {
-            "model": "gpt-3.5-turbo",
             "messages": [
               {
                 "role": "user",
@@ -157,7 +152,7 @@ use crate::llm::openai::OpenAIModelId;
         assert_eq!(response.id, "chatcmpl-abc123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1699896916);
-        assert_eq!(response.model, ModelId::OpenAI(OpenAIModelId::Gpt35Turbo0613));
+        assert_eq!(response.model, "gpt-3.5-turbo-0613");
         assert_eq!(response.system_fingerprint, None);
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 82);
@@ -208,7 +203,7 @@ use crate::llm::openai::OpenAIModelId;
         assert_eq!(response.id, "chatcmpl-123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1677652288);
-        assert_eq!(response.model, ModelId::OpenAI(OpenAIModelId::Gpt35Turbo0613));
+        assert_eq!(response.model, "gpt-3.5-turbo-0613");
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 9);
@@ -415,11 +410,6 @@ use crate::llm::openai::OpenAIModelId;
     #[test]
     pub fn ping_pong_response_format() {
         do_ping_pong_test::<ResponseFormat>()
-    }
-
-    #[test]
-    pub fn ping_pong_chat_request() {
-        do_ping_pong_test::<ChatRequest>()
     }
 
     #[test]
