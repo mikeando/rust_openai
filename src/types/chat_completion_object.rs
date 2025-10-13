@@ -31,7 +31,7 @@ impl FromJson for ChatCompletionObject {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let created = v.get("created").unwrap().as_i64().unwrap();
-        let model = ModelId::from_str(v.get("model").unwrap().as_str().unwrap()).unwrap();
+        let model = ModelId::from_json(v.get("model").unwrap()).unwrap();
         let system_fingerprint = v
             .get("system_fingerprint")
             .and_then(|v| v.as_str())

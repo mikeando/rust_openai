@@ -10,6 +10,15 @@ use reqwest::Client;
 use ring::digest;
 use serde_json::json;
 
+pub mod client;
+pub mod openai;
+pub mod claude;
+pub mod provider;
+
+use client::RawRequester;
+use provider::LLMProvider;
+
+
 type AsyncMutex<T> = tokio::sync::Mutex<T>;
 
 use crate::{
@@ -17,83 +26,35 @@ use crate::{
     types::{ChatCompletionObject, ChatRequest},
 };
 
-pub struct OpenAILLM {
-    requester: Arc<AsyncMutex<dyn RawRequester + Send>>,
+pub struct GenericLLM {
+    provider: LLMProvider,
     cache: Arc<AsyncMutex<dyn RequestCache + Send>>,
 }
 
-impl OpenAILLM {
-    pub async fn with_defaults(openai_api_key: &str) -> anyhow::Result<OpenAILLM> {
+impl GenericLLM {
+    pub async fn with_defaults(openai_api_key: &str) -> anyhow::Result<GenericLLM> {
         let openai_api_key = openai_api_key.to_string();
-        let requester = OpenAIRawRequester { openai_api_key };
-        let requester = Arc::new(AsyncMutex::new(requester));
+        let provider = LLMProvider::OpenAI(Box::new(OpenAIRawRequester { openai_api_key }));
         let fs = DefaultFS {};
         let fs = Arc::new(AsyncMutex::new(fs));
         let cache = DefaultRequestCache::new(fs, PathBuf::from("cache")).await?;
         let cache = Arc::new(AsyncMutex::new(cache));
-        Ok(OpenAILLM::new(requester, cache))
+        Ok(GenericLLM::new(provider, cache))
     }
 
     pub fn new(
-        requester: Arc<AsyncMutex<dyn RawRequester + Send>>,
+        provider: LLMProvider,
         cache: Arc<AsyncMutex<dyn RequestCache + Send>>,
-    ) -> OpenAILLM {
-        OpenAILLM { requester, cache }
+    ) -> GenericLLM {
+        GenericLLM { provider, cache }
+    }
+
+    pub fn set_provider(&mut self, provider: LLMProvider) {
+        self.provider = provider;
     }
 }
 
-#[async_trait]
-pub trait RawRequester {
-    async fn make_uncached_request(
-        &mut self,
-        request: &ChatRequest,
-    ) -> anyhow::Result<ChatCompletionObject>;
-}
-
-pub struct OpenAIRawRequester {
-    pub openai_api_key: String,
-}
-
-#[async_trait]
-impl RawRequester for OpenAIRawRequester {
-    async fn make_uncached_request(
-        &mut self,
-        request: &ChatRequest,
-    ) -> anyhow::Result<ChatCompletionObject> {
-        let client = Client::new();
-
-        let response = client
-            .post("https://api.openai.com/v1/chat/completions")
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.openai_api_key))
-            .json(&request.to_json())
-            .send()
-            .await?;
-
-        let status = response.status();
-        if !status.is_success() {
-            // Try and see if we can divine the reason from the JSON,
-            // if we get any...
-            // TODO: If this doesn't work we should at least return what we do know
-            let response_text = response.text().await?;
-            let v: serde_json::Value = serde_json::from_str(&response_text)?;
-            let error_message = &v["error"]["message"];
-
-            bail!(
-                "Error making openai request: ({} {}) {}",
-                status.as_str(),
-                status.canonical_reason().unwrap_or("Unknown"),
-                error_message.as_str().unwrap_or("")
-            );
-        }
-
-        let response_text = response.text().await?;
-        let v: serde_json::Value = serde_json::from_str(&response_text)?;
-        let response: ChatCompletionObject = ChatCompletionObject::from_json(&v)
-            .map_err(|e| anyhow!("Error decoding openai response: {:?}", e))?;
-        Ok(response)
-    }
-}
+use crate::llm::openai::OpenAIRawRequester;
 
 #[async_trait]
 pub trait RequestCache {
@@ -253,7 +214,7 @@ impl RequestCache for DefaultRequestCache {
     }
 }
 
-impl OpenAILLM {
+impl GenericLLM {
     pub async fn make_request(
         &mut self,
         request: &ChatRequest,
@@ -272,12 +233,10 @@ impl OpenAILLM {
 
         // There is no cache value!
         // Make the request
-        let response = self
-            .requester
-            .lock()
-            .await
-            .make_uncached_request(request)
-            .await?;
+        let response = match &mut self.provider {
+            LLMProvider::OpenAI(r) => r.make_uncached_request(request).await?,
+            LLMProvider::Claude(r) => r.make_uncached_request(request).await?,
+        };
 
         // Cache it for next time
         self.cache

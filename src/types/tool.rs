@@ -39,16 +39,16 @@ impl FromJson for Tool {
             .as_object()
             .with_context(|| "missing function in tool")?;
         Ok(Tool {
-            description: f["description"]
-                .to_opt_string()
-                .with_context(|| "missing or invalid function.description in tool")?,
-            name: f["name"]
-                .as_str()
-                .context("missing or invalid function.name field in tool")?
-                .to_string(),
-            parameters: f["parameters"]
-                .map_opt(JSONSchema::from_json)
-                .context("missing or invalid function.parameters field in tool")?,
+            description: f.get("description")
+                .and_then(|v| v.to_opt_string().ok())
+                .flatten(),
+            name: f.get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .context("missing or invalid function.name field in tool")?,
+            parameters: f.get("parameters")
+                .and_then(|v| v.map_opt(JSONSchema::from_json).ok())
+                .flatten(),
         })
     }
 }

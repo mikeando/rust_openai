@@ -2,7 +2,7 @@ pub mod embedding;
 pub mod generate;
 pub mod json;
 pub mod json_ext;
-pub mod request;
+pub mod llm;
 pub mod types;
 
 #[cfg(test)]
@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::new("gpt-3.5-turbo"),
             vec![
                 Message::system_message("You are a helpful assistant."),
                 Message::user_message("Hello!"),
@@ -63,7 +63,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::new("gpt-3.5-turbo"),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-abc123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1699896916);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.model, ModelId::new("gpt-3.5-turbo-0613"));
         assert_eq!(response.system_fingerprint, None);
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 82);
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1677652288);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.model, ModelId::new("gpt-3.5-turbo-0613"));
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 9);

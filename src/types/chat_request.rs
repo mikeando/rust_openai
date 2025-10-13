@@ -73,7 +73,7 @@ impl ChatRequest {
 impl ToJson for ChatRequest {
     fn to_json(&self) -> serde_json::Value {
         let mut v: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-        v.insert("model".to_string(), json!(self.model.name()));
+        v.insert("model".to_string(), json!(self.model.name));
         v.insert(
             "messages".to_string(),
             serde_json::Value::Array(self.messages.iter().map(|m| m.to_json()).collect()),
