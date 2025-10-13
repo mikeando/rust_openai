@@ -69,6 +69,7 @@ impl ChatRequest {
         result
     }
 
+    /// Sets the response format for the chat request.
     pub fn with_response_format(self, response_format: ResponseFormat) -> ChatRequest {
         let mut result = self;
         result.response_format = Some(response_format);

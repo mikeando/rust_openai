@@ -4,8 +4,10 @@ use crate::json_ext::JsonValueExt;
 use crate::types::{Error, JSONSchema};
 use serde_json::json;
 
+/// Represents the properties of a JSON schema response format.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JsonSchemaProp {
+    /// The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and hyphens, with a maximum length of 64.
     pub name: String,
     pub description: Option<String>,
     pub schema: JSONSchema,
@@ -46,5 +48,34 @@ impl Generatable for JsonSchemaProp {
             schema: context.gen(),
             strict: gen_opt(context, 0.5),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::json::FromJson;
+    use serde_json::json;
+
+    #[test]
+    fn test_json_schema_prop_from_json() {
+        let json = json!({
+            "name": "test",
+            "description": "a test schema",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    }
+                }
+            },
+            "strict": true
+        });
+
+        let prop = JsonSchemaProp::from_json(&json).unwrap();
+        assert_eq!(prop.name, "test");
+        assert_eq!(prop.description, Some("a test schema".to_string()));
+        assert_eq!(prop.strict, Some(true));
     }
 }

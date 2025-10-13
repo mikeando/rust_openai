@@ -2,4 +2,3 @@
 /cache
 .env
 .vscode
-Cargo.lock

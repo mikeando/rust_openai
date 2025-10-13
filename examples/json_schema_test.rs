@@ -1,3 +1,6 @@
+//! This example demonstrates how to use the `response_format` parameter with a `json_schema`
+//! to force the model to return a JSON object that conforms to a specific schema.
+
 use rust_openai::request::OpenAILLM;
 use rust_openai::types::{
     ChatRequest, JsonSchemaProp, Message, ModelId, ResponseFormat, JSONSchema,

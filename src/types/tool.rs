@@ -38,6 +38,7 @@ impl FromJson for Tool {
         Ok(Tool {
             description: f.get("description")
                 .map(|v| v.to_opt_string())
+                // transpose will swap the Option and Result, so we have a Result<Option<Option<String>>, Error>
                 .transpose()?
                 .flatten(),
             name: f.get("name")
