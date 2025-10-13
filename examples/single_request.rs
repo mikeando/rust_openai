@@ -1,4 +1,5 @@
 use rust_openai::llm::GenericLLM;
+use rust_openai::llm::openai::OpenAIModelId;
 
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
@@ -11,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut llm = GenericLLM::with_defaults(&openai_api_key).await?;
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::gpt_4o_mini(),
+        ModelId::OpenAI(OpenAIModelId::Gpt4oMini),
         vec![
             Message::system_message("You are a helpful assistant."),
             Message::user_message("Hello!"),

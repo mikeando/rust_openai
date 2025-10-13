@@ -1,9 +1,10 @@
 use crate::generate::{Generatable, GeneratorContext};
 use crate::json::{FromJson, ToJson};
 use crate::types::Error;
-use crate::types::{ChatCompletionChoice, ModelId, UsageStats};
+use crate::types::{ChatCompletionChoice, UsageStats, ModelId};
 use rand::Rng;
 use serde_json::json;
+use crate::llm::openai::OpenAIModelId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatCompletionObject {
@@ -31,7 +32,7 @@ impl FromJson for ChatCompletionObject {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let created = v.get("created").unwrap().as_i64().unwrap();
-        let model = ModelId::from_json(v.get("model").unwrap()).unwrap();
+        let model = ModelId::from_json(v.get("model").unwrap())?;
         let system_fingerprint = v
             .get("system_fingerprint")
             .and_then(|v| v.as_str())
@@ -83,7 +84,7 @@ impl Generatable for ChatCompletionObject {
             id: context.gen(),
             choices,
             created: context.rng.gen(),
-            model: context.gen(),
+            model: ModelId::OpenAI(OpenAIModelId::gen(context)),
             system_fingerprint: context.gen(),
             object: context.gen(),
             usage: context.gen(),

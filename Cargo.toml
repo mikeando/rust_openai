@@ -23,6 +23,6 @@ anyhow = "1.0.38"
 [dev-dependencies]
 pretty_assertions = "1.4.0"
 
-[[test]]
+[[example]]
 name = "multi_provider"
-path = "tests/multi_provider.rs"
+path = "examples/multi_provider.rs"
