@@ -9,8 +9,11 @@ use serde_json::json;
 pub struct JsonSchemaProp {
     /// The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and hyphens, with a maximum length of 64.
     pub name: String,
+    /// A description of the response format, used by the model to determine how to respond in that format.
     pub description: Option<String>,
+    /// The schema of the response format, described as a JSON Schema object.
     pub schema: JSONSchema,
+    /// Whether to enable strict schema adherence when generating output.
     pub strict: Option<bool>,
 }
 
