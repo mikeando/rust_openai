@@ -83,7 +83,7 @@ async fn test_multi_provider() {
         id: "chatcmpl-123".to_string(),
         choices: vec![],
         created: 1677652288,
-        model: ModelId::new("gpt-4"),
+        model: ModelId::gpt_4o(),
         system_fingerprint: None,
         object: "chat.completion".to_string(),
         usage: rust_openai::types::UsageStats {
@@ -120,7 +120,7 @@ async fn test_multi_provider() {
     );
 
     let request = ChatRequest::new(
-        ModelId::new("gpt-4"),
+        ModelId::gpt_4o(),
         vec![Message::user_message("Hello")],
     );
 
