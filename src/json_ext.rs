@@ -26,6 +26,8 @@ pub trait JsonValueExt {
     fn to_opt_f32(&self) -> Result<Option<f32>, Error>;
     fn to_opt_i32(&self) -> Result<Option<i32>, Error>;
     fn to_opt_string(&self) -> Result<Option<String>, Error>;
+    fn to_opt_bool(&self) -> Result<Option<bool>, Error>;
+    fn to_string_or_err(&self) -> Result<String, Error>;
 }
 
 impl JsonValueExt for serde_json::Value {
@@ -112,6 +114,21 @@ impl JsonValueExt for serde_json::Value {
         }
         self.as_str()
             .map(|s| Some(s.to_string()))
+            .ok_or(Error::JsonExpectedString)
+    }
+
+    fn to_opt_bool(&self) -> Result<Option<bool>, Error> {
+        if self.is_null() {
+            return Ok(None);
+        }
+        self.as_bool()
+            .map(Some)
+            .ok_or(Error::JsonExpectedBool)
+    }
+
+    fn to_string_or_err(&self) -> Result<String, Error> {
+        self.as_str()
+            .map(|s| s.to_string())
             .ok_or(Error::JsonExpectedString)
     }
 }

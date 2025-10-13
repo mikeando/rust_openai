@@ -68,6 +68,12 @@ impl ChatRequest {
         result.max_tokens = max_tokens;
         result
     }
+
+    pub fn with_response_format(self, response_format: ResponseFormat) -> ChatRequest {
+        let mut result = self;
+        result.response_format = Some(response_format);
+        result
+    }
 }
 
 impl ToJson for ChatRequest {
