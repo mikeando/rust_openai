@@ -74,12 +74,11 @@ impl Generatable for Tool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::generate::GeneratorContext;
+    use serde_json::json;
 
     #[test]
     fn test_tool_ping_pong() {
@@ -127,7 +126,9 @@ mod tests {
             }
         });
         let err = Tool::from_json(&v).unwrap_err();
-        assert!(err.to_string().contains("missing or invalid function.name field in tool"));
+        assert!(err
+            .to_string()
+            .contains("missing or invalid function.name field in tool"));
     }
 
     #[test]
@@ -155,7 +156,6 @@ mod tests {
         let tool = Tool::from_json(&v).unwrap();
         assert_eq!(tool.parameters, None);
     }
-
 
     #[test]
     fn test_tool_generatable() {
