@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::Gpt35Turbo(None),
             vec![
                 Message::system_message("You are a helpful assistant."),
                 Message::user_message("Hello!"),
@@ -63,7 +63,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::Gpt35Turbo(None),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -156,7 +156,10 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-abc123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1699896916);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(
+            response.model,
+            ModelId::Gpt35Turbo(Some("0613".to_string()))
+        );
         assert_eq!(response.system_fingerprint, None);
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 82);
@@ -207,7 +210,10 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1677652288);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(
+            response.model,
+            ModelId::Gpt35Turbo(Some("0613".to_string()))
+        );
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 9);
@@ -403,7 +409,14 @@ mod tests {
 
     #[test]
     pub fn ping_pong_model_id() {
-        do_ping_pong_test::<ModelId>()
+        let mut context = GeneratorContext::new();
+        let n_tests = 32;
+        for _ in 0..n_tests {
+            let original = ModelId::gen(&mut context);
+            let json_value = original.to_json();
+            let copy = ModelId::from_json(&json_value).unwrap();
+            assert_eq!(original, copy);
+        }
     }
 
     #[test]
