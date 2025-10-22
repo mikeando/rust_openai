@@ -16,50 +16,37 @@ pub struct Tool {
 
 impl ToJson for Tool {
     fn to_json(&self) -> serde_json::Value {
-        let mut v = json!({
-            "function": {
-                "name": self.name,
-            },
-            "type": "function",
-        });
+        let mut v = serde_json::Map::new();
+        v.insert("type".to_string(), json!("function"));
+        v.insert("name".to_string(), json!(self.name.clone()));
         if let Some(description) = &self.description {
-            v["function"]
-                .as_object_mut()
-                .unwrap()
-                .insert("description".to_string(), json!(description));
+            v.insert("description".to_string(), json!(description));
         }
         if let Some(parameters) = &self.parameters {
-            v["function"]
-                .as_object_mut()
-                .unwrap()
-                .insert("parameters".to_string(), parameters.to_json());
+            v.insert("parameters".to_string(), parameters.to_json());
         }
-        v
+        serde_json::Value::Object(v)
     }
 }
 
 impl FromJson for Tool {
     fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
-        let f = v
-            .get("function")
-            .and_then(|v| v.as_object())
-            .with_context(|| "missing function in tool")?;
         Ok(Tool {
-            description: f
+            description: v
                 .get("description")
                 .unwrap_or(&serde_json::Value::Null)
                 .to_opt_string()
-                .with_context(|| "invalid function.description in tool")?,
-            name: f
+                .with_context(|| "invalid description in tool")?,
+            name: v
                 .get("name")
                 .and_then(|v| v.as_str())
-                .context("missing or invalid function.name field in tool")?
+                .context("missing or invalid name field in tool")?
                 .to_string(),
-            parameters: f
+            parameters: v
                 .get("parameters")
                 .unwrap_or(&serde_json::Value::Null)
                 .map_opt(JSONSchema::from_json)
-                .context("invalid function.parameters field in tool")?,
+                .context("invalid parameters field in tool")?,
         })
     }
 }
@@ -128,15 +115,15 @@ mod tests {
         let err = Tool::from_json(&v).unwrap_err();
         assert!(err
             .to_string()
-            .contains("missing or invalid function.name field in tool"));
+            .contains("missing or invalid name field in tool"));
     }
 
     #[test]
     fn test_deserialize_missing_description() {
         let v = json!({
             "type": "function",
+            "name": "test_tool",
             "function": {
-                "name": "test_tool",
                 "parameters": { "type": "object" }
             }
         });
@@ -148,8 +135,8 @@ mod tests {
     fn test_deserialize_missing_parameters() {
         let v = json!({
             "type": "function",
+            "name": "test_tool",
             "function": {
-                "name": "test_tool",
                 "description": "A tool without parameters"
             }
         });

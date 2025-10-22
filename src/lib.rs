@@ -17,22 +17,15 @@ mod tests {
 
     #[test]
     fn request_to_string() {
-        let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
-            vec![
-                Message::system_message("You are a helpful assistant."),
-                Message::user_message("Hello!"),
-            ],
-        );
+        let request: ChatRequest =
+            ChatRequest::new(ModelId::Gpt5, vec![Message::user_message("Hello!")])
+                .with_instructions("You are a helpful assistant.".to_string());
 
         let expected = r#"
           {
-            "model": "gpt-3.5-turbo",
-            "messages": [
-              {
-                "role": "system",
-                "content": "You are a helpful assistant."
-              },
+            "model": "gpt-5",
+            "instructions": "You are a helpful assistant.",
+            "input": [
               {
                 "role": "user",
                 "content": "Hello!"
@@ -63,7 +56,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::Gpt5,
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -74,40 +67,38 @@ mod tests {
         }]);
 
         let expected = r#"
-          {
-            "model": "gpt-3.5-turbo",
-            "messages": [
-              {
-                "role": "user",
-                "content": "What is the weather like in Boston?"
-              }
-            ],
-            "tools": [
-              {
-                "type": "function",
-                "function": {
-                  "name": "get_current_weather",
-                  "description": "Get the current weather in a given location",
-                  "parameters": {
-                    "type": "object",
-                    "properties": {
-                      "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                      },
-                      "unit": {
-                        "type": "string",
-                        "enum": ["celsius", "fahrenheit"]
-                      }
-                    },
-                    "required": ["location"]
-                  }
-                }
-              }
-            ],
-            "tool_choice": "auto"
-          }
-        "#;
+                    {
+                        "model": "gpt-5",
+                        "input": [
+                            {
+                                "role": "user",
+                                "content": "What is the weather like in Boston?"
+                            }
+                        ],
+                        "tools": [
+                            {
+                                "type": "function",
+                                "name": "get_current_weather",
+                                "description": "Get the current weather in a given location",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "location": {
+                                            "type": "string",
+                                            "description": "The city and state, e.g. San Francisco, CA"
+                                        },
+                                        "unit": {
+                                            "type": "string",
+                                            "enum": ["celsius", "fahrenheit"]
+                                        }
+                                    },
+                                    "required": ["location"]
+                                }
+                            }
+                        ],
+                        "tool_choice": "auto"
+                    }
+                "#;
 
         let v: serde_json::Value = serde_json::from_str(expected).unwrap();
 
@@ -117,61 +108,49 @@ mod tests {
     #[test]
     fn response_from_string_with_tools() {
         let response_raw = r#"
-    {
-        "id": "chatcmpl-abc123",
-        "object": "chat.completion",
-        "created": 1699896916,
-        "model": "gpt-3.5-turbo-0613",
-        "choices": [
-          {
-            "index": 0,
-            "message": {
-              "role": "assistant",
-              "content": null,
-              "tool_calls": [
+        {
+            "id": "chatcmpl-abc123",
+            "object": "chat.completion",
+            "created_at": 1699896916,
+            "model": "gpt-5",
+            "output": [
                 {
-                  "id": "call_abc123",
-                  "type": "function",
-                  "function": {
-                    "name": "get_current_weather",
-                    "arguments": "{\n\"location\": \"Boston, MA\"\n}"
-                  }
+                    "id": "fc_abc123",
+                    "type": "function_call",
+                    "status": "completed",
+                    "arguments": "{\n\"location\": \"Boston, MA\"\n}",
+                    "call_id": "call_abc123",
+                    "name": "get_current_weather"
                 }
-              ]
-            },
-            "logprobs": null,
-            "finish_reason": "tool_calls"
-          }
-        ],
-        "usage": {
-          "prompt_tokens": 82,
-          "completion_tokens": 17,
-          "total_tokens": 99
+            ],
+            "usage": {
+                "input_tokens": 82,
+                "input_tokens_details": { "cached_tokens": 0 },
+                "output_tokens": 17,
+                "output_tokens_details": { "reasoning_tokens": 5 },
+                "total_tokens": 99
+            }
         }
-      }
-      "#;
+        "#;
 
         let response: ChatCompletionObject =
             ChatCompletionObject::from_json(&serde_json::from_str(response_raw).unwrap()).unwrap();
         assert_eq!(response.id, "chatcmpl-abc123");
         assert_eq!(response.object, "chat.completion");
-        assert_eq!(response.created, 1699896916);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.created_at, 1699896916);
+        assert_eq!(response.model.name(), "gpt-5");
         assert_eq!(response.system_fingerprint, None);
-        assert_eq!(response.choices.len(), 1);
-        assert_eq!(response.usage.prompt_tokens, 82);
-        assert_eq!(response.usage.completion_tokens, 17);
+        assert_eq!(response.output.len(), 1);
+        assert_eq!(response.usage.input_tokens, 82);
+        assert_eq!(response.usage.output_tokens, 17);
         assert_eq!(response.usage.total_tokens, 99);
-
-        assert_eq!(response.choices.len(), 1);
-        let assistant_mesg = response.choices[0].message.as_assistant_message().unwrap();
-        assert_eq!(assistant_mesg.content, None);
-        assert_eq!(assistant_mesg.tool_calls.as_ref().unwrap().len(), 1);
-        let tool_call = &assistant_mesg.tool_calls.as_ref().unwrap()[0];
-        assert_eq!(tool_call.id, "call_abc123");
-        assert_eq!(tool_call.function.name, "get_current_weather");
+        let function_call = &response.output[0];
+        assert_eq!(function_call.id.as_ref().unwrap(), "fc_abc123");
+        assert_eq!(function_call.output_type.as_ref().unwrap(), "function_call");
+        assert_eq!(function_call.status.as_ref().unwrap(), "completed");
+        assert_eq!(function_call.name.as_ref().unwrap(), "get_current_weather");
         assert_eq!(
-            tool_call.function.arguments,
+            function_call.arguments.as_ref().unwrap(),
             "{\n\"location\": \"Boston, MA\"\n}"
         );
     }
@@ -179,53 +158,45 @@ mod tests {
     #[test]
     fn response_from_string() {
         let response_raw = r#"
-          {
+        {
             "id": "chatcmpl-123",
             "object": "chat.completion",
-            "created": 1677652288,
-            "model": "gpt-3.5-turbo-0613",
+            "created_at": 1677652288,
+            "model": "gpt-5",
             "system_fingerprint": "fp_44709d6fcb",
-            "choices": [{
-              "index": 0,
-              "message": {
-                "role": "assistant",
+            "output": [{
+                "id": "msg_123",
+                "type": "message",
                 "content": "\n\nHello there, how may I assist you today?"
-              },
-              "logprobs": null,
-              "finish_reason": "stop"
             }],
             "usage": {
-              "prompt_tokens": 9,
-              "completion_tokens": 12,
-              "total_tokens": 21
+                "input_tokens": 9,
+                "input_tokens_details": { "cached_tokens": 0 },
+                "output_tokens": 12,
+                "output_tokens_details": { "reasoning_tokens": 2 },
+                "total_tokens": 21
             }
-          }
+        }
         "#;
 
         let response: ChatCompletionObject =
             ChatCompletionObject::from_json(&serde_json::from_str(response_raw).unwrap()).unwrap();
         assert_eq!(response.id, "chatcmpl-123");
         assert_eq!(response.object, "chat.completion");
-        assert_eq!(response.created, 1677652288);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.created_at, 1677652288);
+        assert_eq!(response.model.name(), "gpt-5");
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
-        assert_eq!(response.choices.len(), 1);
-        assert_eq!(response.usage.prompt_tokens, 9);
-        assert_eq!(response.usage.completion_tokens, 12);
+        assert_eq!(response.output.len(), 1);
+        assert_eq!(response.usage.input_tokens, 9);
+        assert_eq!(response.usage.output_tokens, 12);
         assert_eq!(response.usage.total_tokens, 21);
-
-        assert_eq!(response.choices.len(), 1);
-        let ccc = &response.choices[0];
-        assert_eq!(ccc.finish_reason, FinishReason::Stop);
-        assert_eq!(ccc.index, 0);
-        assert_eq!(ccc.logprobs, None);
-        let mesg = ccc.message.as_assistant_message().unwrap();
+        let msg = &response.output[0];
+        assert_eq!(msg.id.as_ref().unwrap(), "msg_123");
+        assert_eq!(msg.output_type.as_ref().unwrap(), "message");
         assert_eq!(
-            mesg.content.as_ref().unwrap(),
+            msg.content.as_ref().unwrap(),
             "\n\nHello there, how may I assist you today?"
         );
-        assert_eq!(mesg.name, None);
-        assert_eq!(mesg.tool_calls, None);
     }
 
     #[test]
@@ -234,92 +205,40 @@ mod tests {
         {
             "id": "chatcmpl-8qXquDiRDSsRnl5ztx0Nz3Ri3nLdC",
             "object": "chat.completion",
-            "created": 1707533876,
-            "model": "gpt-3.5-turbo-0613",
-            "choices": [
-              {
-                "index": 0,
-                "message": {
-                  "role": "assistant",
-                  "content": "Hi there! How can I assist you today?"
-                },
-                "logprobs": null,
-                "finish_reason": "stop"
-              }
-            ],
+            "created_at": 1707533876,
+            "model": "gpt-5",
+            "output": [{
+                "id": "msg_8qXquDiRDSsRnl5ztx0Nz3Ri3nLdC",
+                "type": "message",
+                "content": "Hi there! How can I assist you today?"
+            }],
             "usage": {
-              "prompt_tokens": 19,
-              "completion_tokens": 10,
-              "total_tokens": 29
+                "input_tokens": 19,
+                "input_tokens_details": { "cached_tokens": 0 },
+                "output_tokens": 10,
+                "output_tokens_details": { "reasoning_tokens": 3 },
+                "total_tokens": 29
             },
             "system_fingerprint": null
-          }
+        }
         "#;
 
         let response: ChatCompletionObject =
             ChatCompletionObject::from_json(&serde_json::from_str(response_raw).unwrap()).unwrap();
         assert_eq!(response.system_fingerprint, None);
-    }
-
-    #[test]
-    pub fn can_create_chat_completion_choice() {
-        let raw_json = json!(
-            {
-                "index": 0,
-                "message": {
-                  "role": "assistant",
-                  "content": "Hello! How can I assist you today?"
-                },
-                "logprobs": null,
-                "finish_reason": "stop"
-            }
-        );
-        let result = ChatCompletionChoice::from_json(&raw_json).unwrap();
-        assert_eq!(result.index, 0);
-        assert_eq!(result.logprobs, None);
-        assert_eq!(result.finish_reason, FinishReason::Stop);
-        let mesg: &AssistantMessage = result.message.as_assistant_message().unwrap();
+        let msg = &response.output[0];
         assert_eq!(
-            mesg.content.as_ref().unwrap(),
-            "Hello! How can I assist you today?"
+            msg.id.as_ref().unwrap(),
+            "msg_8qXquDiRDSsRnl5ztx0Nz3Ri3nLdC"
+        );
+        assert_eq!(msg.output_type.as_ref().unwrap(), "message");
+        assert_eq!(
+            msg.content.as_ref().unwrap(),
+            "Hi there! How can I assist you today?"
         );
     }
 
-    #[test]
-    pub fn can_create_chat_completion_with_tool_choice() {
-        let raw_json = json!({
-            "index": 0,
-            "message": {
-              "role": "assistant",
-              "content": null,
-              "tool_calls": [
-                {
-                  "id": "call_abc123",
-                  "type": "function",
-                  "function": {
-                    "name": "get_current_weather",
-                    "arguments": "{\n\"location\": \"Boston, MA\"\n}"
-                  }
-                }
-              ]
-            },
-            "logprobs": null,
-            "finish_reason": "tool_calls"
-            }
-        );
-
-        let result = ChatCompletionChoice::from_json(&raw_json).unwrap();
-        assert_eq!(result.index, 0);
-        assert_eq!(result.logprobs, None);
-        assert_eq!(result.finish_reason, FinishReason::ToolCalls);
-        let mesg: &AssistantMessage = result.message.as_assistant_message().unwrap();
-        assert_eq!(mesg.content, None);
-        assert_eq!(mesg.tool_calls.as_ref().unwrap().len(), 1);
-        let t = &mesg.tool_calls.as_ref().unwrap()[0];
-        assert_eq!(t.id, "call_abc123");
-        assert_eq!(t.function.name, "get_current_weather");
-        assert_eq!(t.function.arguments, "{\n\"location\": \"Boston, MA\"\n}");
-    }
+    // ...existing code...
 
     #[test]
     pub fn generate_string_is_unique() {
@@ -369,11 +288,6 @@ mod tests {
     #[test]
     pub fn ping_pong_message() {
         do_ping_pong_test::<Message>()
-    }
-
-    #[test]
-    pub fn ping_pong_system_message() {
-        do_ping_pong_test::<SystemMessage>()
     }
 
     #[test]
@@ -452,16 +366,6 @@ mod tests {
             m.to_json()["role"]
                 .as_str()
                 .map(|r| r == "user")
-                .unwrap_or(false)
-        })
-    }
-
-    #[test]
-    pub fn system_message_json_has_correct_role() {
-        property_test(|m: &SystemMessage| {
-            m.to_json()["role"]
-                .as_str()
-                .map(|r| r == "system")
                 .unwrap_or(false)
         })
     }
