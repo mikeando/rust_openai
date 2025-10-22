@@ -1,6 +1,6 @@
 use rust_openai::request::OpenAILLM;
 
-use rust_openai::types::{ChatRequest, Message, ModelId};
+use rust_openai::types::{BaseModelId, ChatRequest, Message, ModelId};
 use std::env;
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt4oMini,
+        ModelId::new(BaseModelId::Gpt4oMini),
         vec![
             Message::system_message("You are a helpful assistant."),
             Message::user_message("Hello!"),

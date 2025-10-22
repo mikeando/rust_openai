@@ -27,7 +27,7 @@ pub use finish_reason::FinishReason;
 pub use json_schema::JSONSchema;
 pub use logit_bias::LogitBias;
 pub use message::Message;
-pub use model_id::ModelId;
+pub use model_id::{BaseModelId, ModelId};
 pub use response_format::ResponseFormat;
 pub use system_message::SystemMessage;
 pub use tool::Tool;

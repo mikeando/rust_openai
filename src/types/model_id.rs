@@ -6,19 +6,10 @@ use rand::Rng;
 use serde_json::json;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ModelId {
-    // $0.5/1.5 per M in/out
+pub enum BaseModelId {
     Gpt35Turbo,
-    Gpt35Turbo0613,
-    Gpt35Turbo0125,
-    // $5.00/15.00 per M in/out
     Gpt4o,
-    Gpt4o20240513,
-    Gpt4o20240806,
-    // $0.15/0.60 per M in/out
     Gpt4oMini,
-    Gpt4oMini20240718,
-    // Frontier Models
     Gpt5,
     Gpt5Mini,
     Gpt5Nano,
@@ -26,60 +17,81 @@ pub enum ModelId {
     Gpt41,
 }
 
-impl ModelId {
-    pub fn name(&self) -> String {
+impl BaseModelId {
+    pub fn name(&self) -> &str {
         match self {
-            ModelId::Gpt35Turbo => String::from("gpt-3.5-turbo"),
-            ModelId::Gpt35Turbo0613 => String::from("gpt-3.5-turbo-0613"),
-            ModelId::Gpt35Turbo0125 => String::from("gpt-3.5-turbo-0125"),
-            ModelId::Gpt4o => String::from("gpt-4o"),
-            ModelId::Gpt4o20240513 => String::from("gpt-4o-2024-05-13"),
-            ModelId::Gpt4o20240806 => String::from("gpt-4o-2024-08-06"),
-            ModelId::Gpt4oMini => String::from("gpt-4o-mini"),
-            ModelId::Gpt4oMini20240718 => String::from("gpt-4o-mini-2024-07-18"),
-            ModelId::Gpt5 => String::from("gpt-5"),
-            ModelId::Gpt5Mini => String::from("gpt-5-mini"),
-            ModelId::Gpt5Nano => String::from("gpt-5-nano"),
-            ModelId::Gpt5Pro => String::from("gpt-5-pro"),
-            ModelId::Gpt41 => String::from("gpt-4.1"),
+            BaseModelId::Gpt35Turbo => "gpt-3.5-turbo",
+            BaseModelId::Gpt4o => "gpt-4o",
+            BaseModelId::Gpt4oMini => "gpt-4o-mini",
+            BaseModelId::Gpt5 => "gpt-5",
+            BaseModelId::Gpt5Mini => "gpt-5-mini",
+            BaseModelId::Gpt5Nano => "gpt-5-nano",
+            BaseModelId::Gpt5Pro => "gpt-5-pro",
+            BaseModelId::Gpt41 => "gpt-4.1",
         }
     }
 
-    pub fn values() -> Vec<ModelId> {
-        vec![
-            ModelId::Gpt35Turbo,
-            ModelId::Gpt35Turbo0613,
-            ModelId::Gpt35Turbo0125,
-            ModelId::Gpt4o,
-            ModelId::Gpt4o20240513,
-            ModelId::Gpt4o20240806,
-            ModelId::Gpt4oMini,
-            ModelId::Gpt4oMini20240718,
-            ModelId::Gpt5,
-            ModelId::Gpt5Mini,
-            ModelId::Gpt5Nano,
-            ModelId::Gpt5Pro,
-            ModelId::Gpt41,
+    pub fn values() -> &'static [BaseModelId] {
+        &[
+            BaseModelId::Gpt35Turbo,
+            BaseModelId::Gpt4o,
+            BaseModelId::Gpt4oMini,
+            BaseModelId::Gpt5,
+            BaseModelId::Gpt5Mini,
+            BaseModelId::Gpt5Nano,
+            BaseModelId::Gpt5Pro,
+            BaseModelId::Gpt41,
         ]
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ModelId {
+    pub base_model: BaseModelId,
+    pub version: Option<String>,
+}
+
+impl ModelId {
+    pub fn new(base_model: BaseModelId) -> ModelId {
+        ModelId {
+            base_model,
+            version: None,
+        }
+    }
+
+    pub fn with_version(mut self, version: &str) -> ModelId {
+        self.version = Some(version.to_string());
+        self
+    }
+
+    pub fn name(&self) -> String {
+        let base = self.base_model.name();
+        if let Some(version) = &self.version {
+            format!("{}-{}", base, version)
+        } else {
+            base.to_string()
+        }
     }
 
     pub fn from_str(name: &str) -> Result<ModelId, Error> {
-        match name {
-            "gpt-3.5-turbo" => Ok(ModelId::Gpt35Turbo),
-            "gpt-3.5-turbo-0613" => Ok(ModelId::Gpt35Turbo0613),
-            "gpt-3.5-turbo-0125" => Ok(ModelId::Gpt35Turbo0125),
-            "gpt-4o" => Ok(ModelId::Gpt4o),
-            "gpt-4o-2024-05-13" => Ok(ModelId::Gpt4o20240513),
-            "gpt-4o-2024-08-06" => Ok(ModelId::Gpt4o20240806),
-            "gpt-4o-mini" => Ok(ModelId::Gpt4oMini),
-            "gpt-4o-mini-2024-07-18" => Ok(ModelId::Gpt4oMini20240718),
-            "gpt-5" => Ok(ModelId::Gpt5),
-            "gpt-5-mini" => Ok(ModelId::Gpt5Mini),
-            "gpt-5-nano" => Ok(ModelId::Gpt5Nano),
-            "gpt-5-pro" => Ok(ModelId::Gpt5Pro),
-            "gpt-4.1" => Ok(ModelId::Gpt41),
-            _ => Err(Error::InvalidModelName),
+        let mut models = BaseModelId::values().to_vec();
+        models.sort_by_key(|b| std::cmp::Reverse(b.name().len()));
+
+        for &base_model in models.iter() {
+            let base_name = base_model.name();
+            if let Some(version) = name.strip_prefix(&format!("{}-", base_name)) {
+                return Ok(ModelId {
+                    base_model,
+                    version: Some(version.to_string()),
+                });
+            } else if name == base_name {
+                return Ok(ModelId {
+                    base_model,
+                    version: None,
+                });
+            }
         }
+        Err(Error::InvalidModelName)
     }
 }
 
@@ -97,8 +109,74 @@ impl ToJson for ModelId {
 
 impl Generatable for ModelId {
     fn gen(context: &mut GeneratorContext) -> Self {
-        let values = Self::values();
-        let i = context.rng.gen_range(0..values.len());
-        values[i]
+        let base_models = [
+            BaseModelId::Gpt35Turbo,
+            BaseModelId::Gpt4o,
+            BaseModelId::Gpt4oMini,
+            BaseModelId::Gpt5,
+            BaseModelId::Gpt5Mini,
+            BaseModelId::Gpt5Nano,
+            BaseModelId::Gpt5Pro,
+            BaseModelId::Gpt41,
+        ];
+        let base_model = base_models[context.rng.gen_range(0..base_models.len())];
+        let version = if base_model != BaseModelId::Gpt41 && context.rng.gen_bool(0.5) {
+            Some(String::gen(context))
+        } else {
+            None
+        };
+        ModelId {
+            base_model,
+            version,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_from_str() {
+        assert_eq!(
+            ModelId::from_str("gpt-4o-2024-05-13").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt4o,
+                version: Some("2024-05-13".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn test_gpt5_parsing() {
+        assert_eq!(
+            ModelId::from_str("gpt-5").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5,
+                version: None
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-test-version").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5,
+                version: Some("test-version".to_string())
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-mini").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5Mini,
+                version: None
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-mini-test-version").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5Mini,
+                version: Some("test-version".to_string())
+            }
+        );
     }
 }
