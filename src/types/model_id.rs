@@ -14,10 +14,10 @@ pub enum ModelId {
     // $0.15/0.60 per M in/out
     Gpt4oMini(Option<String>),
     // Frontier Models
-    Gpt5,
-    Gpt5Mini,
-    Gpt5Nano,
-    Gpt5Pro,
+    Gpt5(Option<String>),
+    Gpt5Mini(Option<String>),
+    Gpt5Nano(Option<String>),
+    Gpt5Pro(Option<String>),
     Gpt41,
 }
 
@@ -27,10 +27,10 @@ impl ModelId {
             ModelId::Gpt35Turbo(v) => ("gpt-3.5-turbo", v),
             ModelId::Gpt4o(v) => ("gpt-4o", v),
             ModelId::Gpt4oMini(v) => ("gpt-4o-mini", v),
-            ModelId::Gpt5 => ("gpt-5", &None),
-            ModelId::Gpt5Mini => ("gpt-5-mini", &None),
-            ModelId::Gpt5Nano => ("gpt-5-nano", &None),
-            ModelId::Gpt5Pro => ("gpt-5-pro", &None),
+            ModelId::Gpt5(v) => ("gpt-5", v),
+            ModelId::Gpt5Mini(v) => ("gpt-5-mini", v),
+            ModelId::Gpt5Nano(v) => ("gpt-5-nano", v),
+            ModelId::Gpt5Pro(v) => ("gpt-5-pro", v),
             ModelId::Gpt41 => ("gpt-4.1", &None),
         };
 
@@ -51,10 +51,10 @@ impl ModelId {
             ModelId::Gpt4o(Some("2024-08-06".to_string())),
             ModelId::Gpt4oMini(None),
             ModelId::Gpt4oMini(Some("2024-07-18".to_string())),
-            ModelId::Gpt5,
-            ModelId::Gpt5Mini,
-            ModelId::Gpt5Nano,
-            ModelId::Gpt5Pro,
+            ModelId::Gpt5(None),
+            ModelId::Gpt5Mini(None),
+            ModelId::Gpt5Nano(None),
+            ModelId::Gpt5Pro(None),
             ModelId::Gpt41,
         ]
     }
@@ -72,14 +72,22 @@ impl ModelId {
             Ok(ModelId::Gpt4o(Some(version.to_string())))
         } else if name == "gpt-4o" {
             Ok(ModelId::Gpt4o(None))
-        } else if name == "gpt-5" {
-            Ok(ModelId::Gpt5)
+        } else if let Some(version) = name.strip_prefix("gpt-5-mini-") {
+            Ok(ModelId::Gpt5Mini(Some(version.to_string())))
         } else if name == "gpt-5-mini" {
-            Ok(ModelId::Gpt5Mini)
+            Ok(ModelId::Gpt5Mini(None))
+        } else if let Some(version) = name.strip_prefix("gpt-5-nano-") {
+            Ok(ModelId::Gpt5Nano(Some(version.to_string())))
         } else if name == "gpt-5-nano" {
-            Ok(ModelId::Gpt5Nano)
+            Ok(ModelId::Gpt5Nano(None))
+        } else if let Some(version) = name.strip_prefix("gpt-5-pro-") {
+            Ok(ModelId::Gpt5Pro(Some(version.to_string())))
         } else if name == "gpt-5-pro" {
-            Ok(ModelId::Gpt5Pro)
+            Ok(ModelId::Gpt5Pro(None))
+        } else if let Some(version) = name.strip_prefix("gpt-5-") {
+            Ok(ModelId::Gpt5(Some(version.to_string())))
+        } else if name == "gpt-5" {
+            Ok(ModelId::Gpt5(None))
         } else if name == "gpt-4.1" {
             Ok(ModelId::Gpt41)
         } else {
