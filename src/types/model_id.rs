@@ -30,6 +30,19 @@ impl BaseModelId {
             BaseModelId::Gpt41 => "gpt-4.1",
         }
     }
+
+    pub fn values() -> &'static [BaseModelId] {
+        &[
+            BaseModelId::Gpt35Turbo,
+            BaseModelId::Gpt4o,
+            BaseModelId::Gpt4oMini,
+            BaseModelId::Gpt5,
+            BaseModelId::Gpt5Mini,
+            BaseModelId::Gpt5Nano,
+            BaseModelId::Gpt5Pro,
+            BaseModelId::Gpt41,
+        ]
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -61,44 +74,24 @@ impl ModelId {
     }
 
     pub fn from_str(name: &str) -> Result<ModelId, Error> {
-        let (base_model, version) = if let Some(version) = name.strip_prefix("gpt-4o-mini-") {
-            (BaseModelId::Gpt4oMini, Some(version))
-        } else if name == "gpt-4o-mini" {
-            (BaseModelId::Gpt4oMini, None)
-        } else if let Some(version) = name.strip_prefix("gpt-3.5-turbo-") {
-            (BaseModelId::Gpt35Turbo, Some(version))
-        } else if name == "gpt-3.5-turbo" {
-            (BaseModelId::Gpt35Turbo, None)
-        } else if let Some(version) = name.strip_prefix("gpt-4o-") {
-            (BaseModelId::Gpt4o, Some(version))
-        } else if name == "gpt-4o" {
-            (BaseModelId::Gpt4o, None)
-        } else if let Some(version) = name.strip_prefix("gpt-5-mini-") {
-            (BaseModelId::Gpt5Mini, Some(version))
-        } else if name == "gpt-5-mini" {
-            (BaseModelId::Gpt5Mini, None)
-        } else if let Some(version) = name.strip_prefix("gpt-5-nano-") {
-            (BaseModelId::Gpt5Nano, Some(version))
-        } else if name == "gpt-5-nano" {
-            (BaseModelId::Gpt5Nano, None)
-        } else if let Some(version) = name.strip_prefix("gpt-5-pro-") {
-            (BaseModelId::Gpt5Pro, Some(version))
-        } else if name == "gpt-5-pro" {
-            (BaseModelId::Gpt5Pro, None)
-        } else if let Some(version) = name.strip_prefix("gpt-5-") {
-            (BaseModelId::Gpt5, Some(version))
-        } else if name == "gpt-5" {
-            (BaseModelId::Gpt5, None)
-        } else if name == "gpt-4.1" {
-            (BaseModelId::Gpt41, None)
-        } else {
-            return Err(Error::InvalidModelName);
-        };
+        let mut models = BaseModelId::values().to_vec();
+        models.sort_by_key(|b| std::cmp::Reverse(b.name().len()));
 
-        Ok(ModelId {
-            base_model,
-            version: version.map(|s| s.to_string()),
-        })
+        for &base_model in models.iter() {
+            let base_name = base_model.name();
+            if let Some(version) = name.strip_prefix(&format!("{}-", base_name)) {
+                return Ok(ModelId {
+                    base_model,
+                    version: Some(version.to_string()),
+                });
+            } else if name == base_name {
+                return Ok(ModelId {
+                    base_model,
+                    version: None,
+                });
+            }
+        }
+        Err(Error::InvalidModelName)
     }
 }
 
@@ -151,6 +144,38 @@ mod tests {
             ModelId {
                 base_model: BaseModelId::Gpt4o,
                 version: Some("2024-05-13".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn test_gpt5_parsing() {
+        assert_eq!(
+            ModelId::from_str("gpt-5").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5,
+                version: None
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-test-version").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5,
+                version: Some("test-version".to_string())
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-mini").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5Mini,
+                version: None
+            }
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5-mini-test-version").unwrap(),
+            ModelId {
+                base_model: BaseModelId::Gpt5Mini,
+                version: Some("test-version".to_string())
             }
         );
     }
