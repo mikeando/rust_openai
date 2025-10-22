@@ -10,13 +10,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("{:?}", openai_api_key);
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
 
-    let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt4oMini,
-        vec![
-            Message::system_message("You are a helpful assistant."),
-            Message::user_message("Hello!"),
-        ],
-    );
+    let request: ChatRequest =
+        ChatRequest::new(ModelId::Gpt5Mini, vec![Message::user_message("Hello!")])
+            .with_instructions("You are a helpful assistant.".to_string());
 
     let (response, is_from_cache) = llm.make_request(&request).await?;
 
