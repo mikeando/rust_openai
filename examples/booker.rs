@@ -1,6 +1,6 @@
 use rust_openai::{
     request::OpenAILLM,
-    types::{JSONSchema, Tool},
+    types::{BaseModelId, JSONSchema, Tool},
 };
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
-    let model_id = ModelId::Gpt4oMini(None);
+    let model_id = ModelId::new(BaseModelId::Gpt4oMini);
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
 

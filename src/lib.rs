@@ -9,7 +9,11 @@ pub mod types;
 mod tests {
     use crate::generate::{Generatable, GeneratorContext};
     use crate::json::{FromJson, ToJson};
-    use crate::types::*;
+    use crate::types::{
+        AssistantMessage, BaseModelId, ChatCompletionChoice, ChatCompletionObject, ChatRequest,
+        FinishReason, LogitBias, Message, ModelId, ResponseFormat, SystemMessage, Tool, ToolCall,
+        ToolChoice, ToolFunction, ToolMessage, UsageStats, UserMessage, JSONSchema,
+    };
 
     use serde_json::json;
 
@@ -18,7 +22,7 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo(None),
+            ModelId::new(BaseModelId::Gpt35Turbo),
             vec![
                 Message::system_message("You are a helpful assistant."),
                 Message::user_message("Hello!"),
@@ -63,7 +67,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo(None),
+            ModelId::new(BaseModelId::Gpt35Turbo),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -158,7 +162,7 @@ mod tests {
         assert_eq!(response.created, 1699896916);
         assert_eq!(
             response.model,
-            ModelId::Gpt35Turbo(Some("0613".to_string()))
+            ModelId::new(BaseModelId::Gpt35Turbo).with_version("0613")
         );
         assert_eq!(response.system_fingerprint, None);
         assert_eq!(response.choices.len(), 1);
@@ -212,7 +216,7 @@ mod tests {
         assert_eq!(response.created, 1677652288);
         assert_eq!(
             response.model,
-            ModelId::Gpt35Turbo(Some("0613".to_string()))
+            ModelId::new(BaseModelId::Gpt35Turbo).with_version("0613")
         );
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
         assert_eq!(response.choices.len(), 1);
