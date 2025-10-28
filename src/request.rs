@@ -63,7 +63,7 @@ impl RawRequester for OpenAIRawRequester {
         let client = Client::new();
 
         let response = client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post("https://api.openai.com/v1/responses")
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.openai_api_key))
             .json(&request.to_json())

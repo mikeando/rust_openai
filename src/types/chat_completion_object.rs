@@ -1,92 +1,66 @@
-use crate::generate::{Generatable, GeneratorContext};
-use crate::json::{FromJson, ToJson};
-use crate::types::Error;
-use crate::types::{ChatCompletionChoice, ModelId, UsageStats};
-use rand::Rng;
-use serde_json::json;
+use crate::{
+    generate::{Generatable, GeneratorContext},
+    json::{FromJson, ToJson},
+    types::{ChatCompletionChoice, Error, ModelId, UsageStats},
+};
 
-#[derive(Debug, Clone, PartialEq)]
+use rand::Rng;
+use serde_json::{json, Value};
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct ChatCompletionObject {
     pub id: String,
-    pub choices: Vec<ChatCompletionChoice>,
+    pub object: String,
     pub created: i64,
     pub model: ModelId,
+    pub choices: Vec<ChatCompletionChoice>,
     pub system_fingerprint: Option<String>,
-    pub object: String,
     pub usage: UsageStats,
 }
-impl FromJson for ChatCompletionObject {
-    fn from_json(v: &serde_json::Value) -> Result<ChatCompletionObject, Error> {
-        if !v.is_object() {
-            return Err(Error::InvalidJsonStructure);
-        }
-        let id = v.get("id").unwrap().as_str().unwrap().to_string();
-        let choices = v
-            .get("choices")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(ChatCompletionChoice::from_json)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        let created = v.get("created").unwrap().as_i64().unwrap();
-        let model = ModelId::from_str(v.get("model").unwrap().as_str().unwrap()).unwrap();
-        let system_fingerprint = v
-            .get("system_fingerprint")
-            .and_then(|v| v.as_str())
-            .map(|v| v.to_string());
-        let object = v.get("object").unwrap().as_str().unwrap().to_string();
 
-        let usage = UsageStats {
-            prompt_tokens: v["usage"]["prompt_tokens"].as_i64().unwrap() as u32,
-            completion_tokens: v["usage"]["completion_tokens"].as_i64().unwrap() as u32,
-            total_tokens: v["usage"]["total_tokens"].as_i64().unwrap() as u32,
-        };
-
-        Ok(ChatCompletionObject {
-            id,
-            choices,
-            created,
-            model,
-            system_fingerprint,
-            object,
-            usage,
+impl ToJson for ChatCompletionObject {
+    fn to_json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "object": self.object,
+            "created": self.created,
+            "model": self.model.to_json(),
+            "choices": self.choices.iter().map(|c| c.to_json()).collect::<Vec<Value>>(),
+            "system_fingerprint": self.system_fingerprint,
+            "usage": self.usage.to_json(),
         })
     }
 }
 
-impl ToJson for ChatCompletionObject {
-    fn to_json(&self) -> serde_json::Value {
-        let choices: Vec<serde_json::Value> = self.choices.iter().map(|v| v.to_json()).collect();
-        let mut v = json!({
-            "id": self.id,
-            "choices": choices,
-            "created": self.created,
-            "model": self.model.to_json(),
-            "object": self.object,
-            "usage": self.usage.to_json(),
-        });
-        if let Some(system_fingerprint) = &self.system_fingerprint {
-            v["system_fingerprint"] = json!(system_fingerprint);
-        }
-        v
+impl FromJson for ChatCompletionObject {
+    fn from_json(value: &Value) -> Result<Self, Error> {
+        Ok(Self {
+            id: value["id"].as_str().unwrap().to_string(),
+            object: value["object"].as_str().unwrap().to_string(),
+            created: value["created"].as_i64().unwrap(),
+            model: ModelId::from_json(&value["model"])?,
+            choices: value["choices"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(ChatCompletionChoice::from_json)
+                .collect::<Result<Vec<ChatCompletionChoice>, Error>>()?,
+            system_fingerprint: value["system_fingerprint"].as_str().map(|s| s.to_string()),
+            usage: UsageStats::from_json(&value["usage"])?,
+        })
     }
 }
 
 impl Generatable for ChatCompletionObject {
     fn gen(context: &mut GeneratorContext) -> Self {
-        let choices = (0..context.rng.gen_range(0..4))
-            .map(|_| ChatCompletionChoice::gen(context))
-            .collect();
-        ChatCompletionObject {
-            id: context.gen(),
-            choices,
+        Self {
+            id: String::gen(context),
+            object: "chat.completion".to_string(),
             created: context.rng.gen(),
-            model: context.gen(),
-            system_fingerprint: context.gen(),
-            object: context.gen(),
-            usage: context.gen(),
+            model: ModelId::gen(context),
+            choices: vec![ChatCompletionChoice::gen(context), ChatCompletionChoice::gen(context)],
+            system_fingerprint: Some(String::gen(context)),
+            usage: UsageStats::gen(context),
         }
     }
 }

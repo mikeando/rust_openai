@@ -40,19 +40,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
-    let model_id = ModelId::Gpt4oMini;
+    let model_id = ModelId::Gpt5Mini;
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
 
     let request: ChatRequest = ChatRequest::new(
         model_id,
         vec![
-            Message::system_message("You are a an expert book authoring AI."),
             Message::user_message("Generate a outline for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills."),
         ],
-    ).with_tools(vec![
+    ).with_instructions("You are a an expert book authoring AI.".to_string())
+    .with_tools(vec![
         Tool{
-            description: Some("Create the outline for a new book as a list of chapters".to_string()), 
+            description: Some("Create the outline for a new book as a list of chapters".to_string()),
             name: "generate_outline".to_string(),
             parameters: Some(schema2),
         }]);
@@ -87,10 +87,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request: ChatRequest = ChatRequest::new(
         model_id,
         vec![
-            Message::system_message("You are a an expert book authoring AI."),
             Message::user_message(format!("Generate a one paragraph description for the following book:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills.\n\n{}", overview)),
         ],
-    );
+    ).with_instructions("You are a an expert book authoring AI.".to_string());
 
     let (response, is_from_cache) = llm.make_request(&request).await?;
 
@@ -118,12 +117,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let request: ChatRequest = ChatRequest::new(
             model_id,
             vec![
-                Message::system_message("You are a an expert book authoring AI."),
                 Message::user_message(format!("Create a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}\n\n{}\n", chapter_index, summary, overview )),
             ],
-        ).with_tools(vec![
+        ).with_instructions("You are a an expert book authoring AI.".to_string())
+        .with_tools(vec![
             Tool{
-                description: Some("Submit a list of sections for a chapter".to_string()), 
+                description: Some("Submit a list of sections for a chapter".to_string()),
                 name: "generate_chapter_outline".to_string(),
                 parameters: Some(schema2.clone()),
             }]);

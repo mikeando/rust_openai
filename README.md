@@ -1,5 +1,26 @@
-use rust_openai::request::OpenAILLM;
+# Rust OpenAI Client
 
+This is a Rust client for the OpenAI API. It is currently under development and supports the following features:
+
+- GPT-5 models
+- The Responses API
+- Tool calling
+
+## Installation
+
+To use this client, add the following to your `Cargo.toml` file:
+
+```toml
+[dependencies]
+rust_openai = { git = "https://github.com/example/rust_openai.git" }
+```
+
+## Usage
+
+Here is a basic example of how to use the client to make a request to the API:
+
+```rust
+use rust_openai::request::OpenAILLM;
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
 
@@ -7,7 +28,6 @@ use std::env;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
-    eprintln!("{:?}", openai_api_key);
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
 
     let request: ChatRequest = ChatRequest::new(
@@ -24,3 +44,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+```

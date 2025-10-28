@@ -18,21 +18,17 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::Gpt5,
             vec![
-                Message::system_message("You are a helpful assistant."),
                 Message::user_message("Hello!"),
             ],
-        );
+        ).with_instructions("You are a helpful assistant.".to_string());
 
         let expected = r#"
           {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-5",
+            "instructions": "You are a helpful assistant.",
             "messages": [
-              {
-                "role": "system",
-                "content": "You are a helpful assistant."
-              },
               {
                 "role": "user",
                 "content": "Hello!"
@@ -63,7 +59,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt35Turbo,
+            ModelId::Gpt5,
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -75,7 +71,7 @@ mod tests {
 
         let expected = r#"
           {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-5",
             "messages": [
               {
                 "role": "user",
@@ -121,7 +117,7 @@ mod tests {
         "id": "chatcmpl-abc123",
         "object": "chat.completion",
         "created": 1699896916,
-        "model": "gpt-3.5-turbo-0613",
+        "model": "gpt-5",
         "choices": [
           {
             "index": 0,
@@ -156,7 +152,7 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-abc123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1699896916);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.model, ModelId::Gpt5);
         assert_eq!(response.system_fingerprint, None);
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 82);
@@ -183,7 +179,7 @@ mod tests {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "created": 1677652288,
-            "model": "gpt-3.5-turbo-0613",
+            "model": "gpt-5",
             "system_fingerprint": "fp_44709d6fcb",
             "choices": [{
               "index": 0,
@@ -207,7 +203,7 @@ mod tests {
         assert_eq!(response.id, "chatcmpl-123");
         assert_eq!(response.object, "chat.completion");
         assert_eq!(response.created, 1677652288);
-        assert_eq!(response.model, ModelId::Gpt35Turbo0613);
+        assert_eq!(response.model, ModelId::Gpt5);
         assert_eq!(response.system_fingerprint.unwrap(), "fp_44709d6fcb");
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.usage.prompt_tokens, 9);
@@ -235,7 +231,7 @@ mod tests {
             "id": "chatcmpl-8qXquDiRDSsRnl5ztx0Nz3Ri3nLdC",
             "object": "chat.completion",
             "created": 1707533876,
-            "model": "gpt-3.5-turbo-0613",
+            "model": "gpt-5",
             "choices": [
               {
                 "index": 0,
@@ -372,11 +368,6 @@ mod tests {
     }
 
     #[test]
-    pub fn ping_pong_system_message() {
-        do_ping_pong_test::<SystemMessage>()
-    }
-
-    #[test]
     pub fn ping_pong_user_message() {
         do_ping_pong_test::<UserMessage>()
     }
@@ -452,16 +443,6 @@ mod tests {
             m.to_json()["role"]
                 .as_str()
                 .map(|r| r == "user")
-                .unwrap_or(false)
-        })
-    }
-
-    #[test]
-    pub fn system_message_json_has_correct_role() {
-        property_test(|m: &SystemMessage| {
-            m.to_json()["role"]
-                .as_str()
-                .map(|r| r == "system")
                 .unwrap_or(false)
         })
     }

@@ -1,174 +1,174 @@
-use crate::generate::{
-    func_gen, gen_opt_vec, gen_vec, opt_gen, Generatable, Generator, GeneratorContext,
+use crate::{
+    generate::{Generatable, GeneratorContext},
+    json::{FromJson, ToJson},
+    types::{Error, Message, ModelId, ResponseFormat, Tool, ToolChoice},
 };
-use crate::json::{FromJson, ToJson};
-use crate::json_ext::JsonValueExt;
-use crate::types::Error;
-use crate::types::{LogitBias, Message, ModelId, ResponseFormat, Tool, ToolChoice};
+
 use rand::Rng;
-use serde_json::json;
+use serde_json::{json, Value};
 
-use std::collections::BTreeMap;
-
-/// TODO: Extract logit_bias as own struct.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ChatRequest {
     pub model: ModelId,
     pub messages: Vec<Message>,
-    pub frequency_penalty: Option<f32>,
-    pub logit_bias: Option<LogitBias>,
-    pub max_tokens: Option<u32>,
-    pub n: Option<u32>,
-    pub presence_penalty: Option<f32>,
+    pub instructions: Option<String>,
     pub response_format: Option<ResponseFormat>,
-    pub seed: Option<i32>,
-    pub stop: Option<Vec<String>>,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
+    pub seed: Option<i64>,
+    pub store: Option<bool>,
     pub tools: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
-    pub user: Option<String>,
+    pub previous_response_id: Option<String>,
 }
 
 impl ChatRequest {
-    pub fn new(model: ModelId, messages: Vec<Message>) -> ChatRequest {
-        ChatRequest {
+    pub fn new(model: ModelId, messages: Vec<Message>) -> Self {
+        Self {
             model,
             messages,
-            frequency_penalty: None,
-            logit_bias: None,
-            max_tokens: None,
-            n: None,
-            presence_penalty: None,
+            instructions: None,
             response_format: None,
             seed: None,
-            stop: None,
-            temperature: None,
-            top_p: None,
+            store: None,
             tools: None,
             tool_choice: None,
-            user: None,
+            previous_response_id: None,
         }
     }
 
-    pub fn with_tool_choice(self, v: ToolChoice) -> ChatRequest {
-        let mut result = self;
-        result.tool_choice = Some(v);
-        result
+    pub fn with_instructions(mut self, instructions: String) -> Self {
+        self.instructions = Some(instructions);
+        self
     }
 
-    pub fn with_tools(self, tools: Vec<Tool>) -> ChatRequest {
-        let mut result = self;
-        result.tools = Some(tools);
-        result
+    pub fn with_response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
     }
 
-    pub fn with_max_tokens(self, max_tokens: Option<u32>) -> ChatRequest {
-        let mut result = self;
-        result.max_tokens = max_tokens;
-        result
+    pub fn with_seed(mut self, seed: i64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    pub fn with_store(mut self, store: bool) -> Self {
+        self.store = Some(store);
+        self
+    }
+
+    pub fn with_tools(mut self, tools: Vec<Tool>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
+    pub fn with_previous_response_id(mut self, previous_response_id: String) -> Self {
+        self.previous_response_id = Some(previous_response_id);
+        self
     }
 }
 
 impl ToJson for ChatRequest {
-    fn to_json(&self) -> serde_json::Value {
-        let mut v: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-        v.insert("model".to_string(), json!(self.model.name()));
-        v.insert(
-            "messages".to_string(),
-            serde_json::Value::Array(self.messages.iter().map(|m| m.to_json()).collect()),
-        );
-        if let Some(frequency_penalty) = &self.frequency_penalty {
-            v.insert("frequency_penalty".to_string(), json!(frequency_penalty));
-        }
-        if let Some(logit_bias) = &self.logit_bias {
-            v.insert("logit_bias".to_string(), logit_bias.to_json());
-        }
-        if let Some(max_tokens) = &self.max_tokens {
-            v.insert("max_tokens".to_string(), json!(max_tokens));
-        }
-        if let Some(n) = &self.n {
-            v.insert("n".to_string(), json!(n));
-        }
-        if let Some(presence_penalty) = &self.presence_penalty {
-            v.insert("presence_penalty".to_string(), json!(presence_penalty));
+    fn to_json(&self) -> Value {
+        let mut result = json!({
+            "model": self.model.to_json(),
+            "messages": self.messages.iter().map(|m| m.to_json()).collect::<Vec<Value>>(),
+        });
+        if let Some(instructions) = &self.instructions {
+            result["instructions"] = json!(instructions);
         }
         if let Some(response_format) = &self.response_format {
-            v.insert("response_format".to_string(), response_format.to_json());
+            result["response_format"] = response_format.to_json();
         }
-        if let Some(seed) = &self.seed {
-            v.insert("seed".to_string(), json!(seed));
+        if let Some(seed) = self.seed {
+            result["seed"] = json!(seed);
         }
-        if let Some(stop) = &self.stop {
-            v.insert("stop".to_string(), json!(stop));
-        }
-        if let Some(temperature) = &self.temperature {
-            v.insert("temperature".to_string(), json!(temperature));
-        }
-        if let Some(top_p) = &self.top_p {
-            v.insert("top_p".to_string(), json!(top_p));
+        if let Some(store) = self.store {
+            result["store"] = json!(store);
         }
         if let Some(tools) = &self.tools {
-            v.insert(
-                "tools".to_string(),
-                serde_json::Value::Array(tools.iter().map(|tool| tool.to_json()).collect()),
-            );
+            result["tools"] = json!(tools.iter().map(|t| t.to_json()).collect::<Vec<Value>>());
         }
         if let Some(tool_choice) = &self.tool_choice {
-            v.insert("tool_choice".to_string(), tool_choice.to_json());
+            result["tool_choice"] = tool_choice.to_json();
         }
-        if let Some(user) = &self.user {
-            v.insert("user".to_string(), json!(user));
+        if let Some(previous_response_id) = &self.previous_response_id {
+            result["previous_response_id"] = json!(previous_response_id);
         }
-
-        json!(v)
+        result
     }
 }
 
 impl FromJson for ChatRequest {
-    fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
-        Ok(ChatRequest {
-            model: ModelId::from_json(&v["model"])?,
-            messages: v["messages"].flat_map_array(Message::from_json)?,
-            frequency_penalty: v["frequency_penalty"].to_opt_f32()?,
-            logit_bias: v["logit_bias"].map_opt_obj(LogitBias::from_json)?,
-            max_tokens: v["max_tokens"].to_opt_u32()?,
-            n: v["n"].to_opt_u32()?,
-            presence_penalty: v["presence_penalty"].to_opt_f32()?,
-            response_format: v["response_format"].map_opt_obj(ResponseFormat::from_json)?,
-            seed: v["seed"].to_opt_i32()?,
-            stop: v["stop"].flat_map_opt_array(|v| {
-                v.as_str()
-                    .map(|s| s.to_string())
-                    .ok_or(Error::JsonExpectedString)
-            })?,
-            temperature: v["temperature"].to_opt_f32()?,
-            top_p: v["top_p"].to_opt_f32()?,
-            tools: v["tools"].flat_map_opt_array(Tool::from_json)?,
-            tool_choice: v["tool_choice"].map_opt(ToolChoice::from_json)?,
-            user: v["user"].to_opt_string()?,
-        })
+    fn from_json(value: &Value) -> Result<Self, Error> {
+        let model = ModelId::from_json(&value["model"])?;
+        let messages = value["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(Message::from_json)
+            .collect::<Result<Vec<Message>, Error>>()?;
+        let mut result = Self::new(model, messages);
+        if let Some(instructions) = value.get("instructions") {
+            result = result.with_instructions(instructions.as_str().unwrap().to_string());
+        }
+        if let Some(response_format) = value.get("response_format") {
+            result = result.with_response_format(ResponseFormat::from_json(response_format)?);
+        }
+        if let Some(seed) = value.get("seed") {
+            result = result.with_seed(seed.as_i64().unwrap());
+        }
+        if let Some(store) = value.get("store") {
+            result = result.with_store(store.as_bool().unwrap());
+        }
+        if let Some(tools) = value.get("tools") {
+            result = result.with_tools(
+                tools
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(Tool::from_json)
+                    .collect::<Result<Vec<Tool>, Error>>()?,
+            );
+        }
+        if let Some(tool_choice) = value.get("tool_choice") {
+            result = result.with_tool_choice(ToolChoice::from_json(tool_choice)?);
+        }
+        if let Some(previous_response_id) = value.get("previous_response_id") {
+            result =
+                result.with_previous_response_id(previous_response_id.as_str().unwrap().to_string());
+        }
+        Ok(result)
     }
 }
 
 impl Generatable for ChatRequest {
     fn gen(context: &mut GeneratorContext) -> Self {
-        ChatRequest {
-            model: context.gen(),
-            messages: gen_vec(context, 0, 4),
-            frequency_penalty: context.rng.gen(),
-            logit_bias: context.gen(),
-            max_tokens: opt_gen(0.5, func_gen(|c| c.rng.gen_range(0..100))).gen(context),
-            n: opt_gen(0.5, func_gen(|c| c.rng.gen_range(1..=4))).gen(context),
-            presence_penalty: opt_gen(0.5, func_gen(|c| c.rng.gen())).gen(context),
-            response_format: context.gen(),
-            seed: opt_gen(0.25, func_gen(|c| c.rng.gen_range(0..100))).gen(context),
-            stop: gen_opt_vec(context, 0.25, 0, 4),
-            temperature: opt_gen(0.25, func_gen(|c| c.rng.gen())).gen(context),
-            top_p: opt_gen(0.25, func_gen(|c| c.rng.gen())).gen(context),
-            tools: gen_opt_vec(context, 0.25, 0, 4),
-            tool_choice: context.gen(),
-            user: context.gen(),
+        let mut result = Self::new(
+            ModelId::gen(context),
+            vec![Message::gen(context), Message::gen(context)],
+        );
+        if context.rng.gen() {
+            result = result.with_response_format(ResponseFormat::gen(context));
         }
+        if context.rng.gen() {
+            result = result.with_seed(context.rng.gen());
+        }
+        if context.rng.gen() {
+            result = result.with_store(context.rng.gen());
+        }
+        if context.rng.gen() {
+            result = result.with_tools(vec![Tool::gen(context), Tool::gen(context)]);
+        }
+        if context.rng.gen() {
+            result = result.with_tool_choice(ToolChoice::gen(context));
+        }
+        if context.rng.gen() {
+            result = result.with_previous_response_id(String::gen(context));
+        }
+        result
     }
 }
