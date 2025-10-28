@@ -119,6 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Break down the first chapter
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(ChapterBreakdown)).unwrap());
 
+    let mut chapter_breakdowns = Vec::new();
     for chapter_index in 1..=args.chapters.len() {
         println!("=== processing chapter {}", chapter_index);
 
@@ -144,14 +145,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             c.output_type.as_deref() == Some("function_call")
                 && c.name.as_deref() == Some("submit_chapter_outline")
         });
-        let args: ChapterBreakdown = serde_json::from_str(
+        let breakdown: ChapterBreakdown = serde_json::from_str(
             function_call_response
                 .and_then(|c| c.arguments.as_ref())
                 .expect("No function_call output with arguments found"),
         )
         .unwrap();
-        println!("{:#?}", args);
+        println!("{:#?}", breakdown);
+        chapter_breakdowns.push(breakdown);
     }
+
+    // Write results to markdown file
+    let mut markdown = String::new();
+    markdown.push_str("# Book Summary\n\n");
+    markdown.push_str(&summary);
+    markdown.push_str("\n\n# Chapters\n\n");
+    for (i, chapter) in args.chapters.iter().enumerate() {
+        markdown.push_str(&format!(
+            "## Chapter {}: {}\n\n**{}**\n\n{}\n\n",
+            i + 1,
+            chapter.title,
+            chapter.subtitle,
+            chapter.overview
+        ));
+        if let Some(breakdown) = chapter_breakdowns
+            .iter()
+            .find(|b| b.chapter_index as usize == i + 1)
+        {
+            markdown.push_str("### Sections\n\n");
+            for section in &breakdown.sections {
+                markdown.push_str(&format!("#### {}\n", section.title));
+                for point in &section.key_points {
+                    markdown.push_str(&format!("- {}\n", point));
+                }
+                markdown.push_str("\n");
+            }
+        }
+    }
+    std::fs::write("book_output.md", markdown)?;
+    println!("Book written to book_output.md");
 
     Ok(())
 }
