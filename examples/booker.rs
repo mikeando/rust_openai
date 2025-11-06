@@ -1,11 +1,12 @@
+use anyhow::Context;
 use rust_openai::{
     request::OpenAILLM,
-    types::{JSONSchema, Tool},
+    types::{ChatCompletionObject, JSONSchema, Tool},
 };
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use std::fmt::Write;
+use std::{fmt::Write, marker::PhantomData};
 
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
@@ -17,8 +18,11 @@ struct Outline {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct ChapterOutline {
+    /// chapter title, not including number.
     title: String,
+    /// chapter subtitle
     subtitle: String,
+    /// chapter overview
     overview: String,
 }
 
@@ -35,42 +39,104 @@ struct SectionOutline {
     key_points: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+struct ReviewResult {
+    // overall summary of strengths and weaknesses
+    summary: String,
+    // individual concrete review suggestions
+    suggestions: Vec<String>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+struct ReviewSuggestions {
+    // individual concrete review suggestions
+    suggestions: Vec<String>,
+}
+
+pub fn get_tool_response<T: serde::de::DeserializeOwned>(chat_completion_object: ChatCompletionObject, tool_name: &str) -> anyhow::Result<T> {
+    let function_call_response = chat_completion_object.output.iter().find(|c| {
+        c.output_type.as_deref() == Some("function_call")
+            && c.name.as_deref() == Some(tool_name)
+    })
+    .with_context(|| format!("No function_call output found for tool: {}", tool_name))?;
+
+    let args =  function_call_response.arguments.as_ref().with_context(|| format!("No arguments found in function_call output for tool: {}", tool_name))?;
+    let args: T = serde_json::from_str(&args).with_context(|| format!("Failed to parse arguments for tool: {}", tool_name))?;
+    Ok(args)
+}
+
+struct TypedTool<T> {
+    _t: PhantomData<T>,
+    tool: Tool,
+}
+
+impl<T: JsonSchema + serde::de::DeserializeOwned> TypedTool<T> {
+    pub fn create(
+        name: &str,
+        description: &str,
+    ) -> TypedTool<T> {
+        let schema = JSONSchema(serde_json::to_value(schema_for!(T)).unwrap());
+
+        let tool = Tool {
+            description: Some(description.to_string()),
+            name: name.to_string(),
+            parameters: Some(schema),
+        };
+        TypedTool { _t: PhantomData, tool }
+    }
+
+    pub fn create_request(&self, request: ChatRequest) -> ModelToolRequest<T> {
+        ModelToolRequest::with_tool(request, self  )
+    }
+}
+
+struct ModelToolRequest<T> {
+    _t: PhantomData<T>,
+    tool_name: String,
+    request: ChatRequest,
+}
+
+impl <T: JsonSchema + serde::de::DeserializeOwned> ModelToolRequest<T> {
+    pub fn make_request(&self, llm: &mut OpenAILLM) -> anyhow::Result<T> {
+        let (response, _is_from_cache) = llm.make_request(&self.request)?;
+        let result: T = get_tool_response(response, &self.tool_name)?;
+        Ok(result)
+    }
+
+    pub fn with_tool(request: ChatRequest, tool: &TypedTool<T>) -> ModelToolRequest<T> {
+        let tools = vec![tool.tool.clone()];
+        let request = request.with_tools(tools);
+        ModelToolRequest { _t: PhantomData::default(), request, tool_name: tool.tool.name.clone()}
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
     let model_id = ModelId::Gpt5Mini;
 
-    let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
+    let outline_tool = TypedTool::<Outline>::create(
+        "submit_outline",
+        "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
+    );
 
-    let tools = vec![Tool {
-        description: Some("Submit the outline for a new book as a list of chapters".to_string()),
-        name: "submit_outline".to_string(),
-        parameters: Some(schema2),
-    }];
-    for tool in &tools {
-        assert!(!tool.name.is_empty(), "Tool name must not be empty");
-    }
-    let request: ChatRequest = ChatRequest::new(
+    let prompt = [
+        "Generate a outline for the following book, then submit it with the provided function:",
+        "",
+        "Subject matter: World building for fantasy and science fiction novels.",
+        "",
+        "Target Audience: Professional and experiences authors looking to improve their world building skills."
+    ].join("\n");
+    let request = outline_tool.create_request(ChatRequest::new(
         model_id,
         vec![
-            Message::user_message("Generate a outline for the following book, then submit it with the provided function:\n\nSubject matter: World building for fantasy and science fiction novels.\n\nTarget Audience: Professional and experiences authors looking to improve their world building skills."),
+            Message::user_message(prompt),
         ],
     ).with_instructions("You are a an expert book authoring AI.".to_string())
-    .with_tools(tools);
+    );
 
-    let (response, _is_from_cache) = llm.make_request(&request)?;
-
-    let function_call_response = &response.output.iter().find(|c| {
-        c.output_type.as_deref() == Some("function_call")
-            && c.name.as_deref() == Some("submit_outline")
-    });
-    let args: Outline = serde_json::from_str(
-        function_call_response
-            .and_then(|c| c.arguments.as_ref())
-            .expect("No function_call output with arguments found"),
-    )
-    .unwrap();
+    let args: Outline = request.make_request(&mut llm)?;
     println!("=== Generated Outline:");
     println!("{:#?}", args);
 
@@ -114,42 +180,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("{}", overview);
 
-    // Break down the first chapter
-    let schema2 = JSONSchema(serde_json::to_value(schema_for!(ChapterBreakdown)).unwrap());
+    // Write this to a file for reference
+    std::fs::write("book_overview.md", format!("{}\n\n{}", summary, overview))?;
 
+    // Break down the first chapter
     let mut chapter_breakdowns = Vec::new();
     for chapter_index in 1..=args.chapters.len() {
         println!("=== processing chapter {}", chapter_index);
 
-        let tools = vec![Tool {
-            description: Some("Submit a list of sections for a chapter".to_string()),
-            name: "submit_chapter_outline".to_string(),
-            parameters: Some(schema2.clone()),
-        }];
-        for tool in &tools {
-            assert!(!tool.name.is_empty(), "Tool name must not be empty");
-        }
+        let chapter_outline_tool = TypedTool::<ChapterBreakdown>::create(
+            "submit_chapter_outline",
+            "Submit a breakdown of a chapter into sections with key points."
+        );
+
         let request: ChatRequest = ChatRequest::new(
             model_id,
             vec![
                 Message::user_message(format!("Create and submit a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}\n\n{}\n", chapter_index, summary, overview )),
             ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string())
-        .with_tools(tools);
+        ).with_instructions("You are a an expert book authoring AI.".to_string());
+        let request = chapter_outline_tool.create_request(request);
 
-        let (response, _is_from_cache) = llm.make_request(&request)?;
-
-        let function_call_response = &response.output.iter().find(|c| {
-            c.output_type.as_deref() == Some("function_call")
-                && c.name.as_deref() == Some("submit_chapter_outline")
-        });
-        let breakdown: ChapterBreakdown = serde_json::from_str(
-            function_call_response
-                .and_then(|c| c.arguments.as_ref())
-                .expect("No function_call output with arguments found"),
-        )
-        .unwrap();
-        println!("{:#?}", breakdown);
+        let breakdown: ChapterBreakdown = request.make_request(&mut llm)?;    
         chapter_breakdowns.push(breakdown);
     }
 
@@ -180,8 +232,172 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    std::fs::write("book_output.md", markdown)?;
+    std::fs::write("book_output.md", &markdown)?;
     println!("Book written to book_output.md");
 
+    //
+    // Our next job is to crcitique the book summary in a variety of ways.
+    // We will then rank, combine and apply the top N fixes.
+    //
+    // These axes were generated by asking chatGPT the following:
+    //
+    // > You are going to be given a document containing a book summary with a detailed 
+    // > chapter/section break down for that book. It is a non-fiction book on world building 
+    // > for experienced authors. Your role is to assist the author to improve the final result 
+    // > of his writing process. Consider several different axes on which you could critique the 
+    // > summary document. Note: You will not have access to the final text, just the overall 
+    // > detailed structure of the document and the section/chapter names.
+    //
+    // We could do this iteratively too.
+    let review_axes = vec![
+        "Structural coherence - logical flow between sections; escalation of concepts; consistent depth per chapter.",
+        "Conceptual hierarchy - balance between high-level theory and actionable technique; redundancy or missing transitional content.",
+        "Topical coverage - completeness of worldbuilding domains (sociology, ecology, economics, linguistics, metaphysics, etc.); detection of bias toward one discipline.",
+        "Reader progression - how concepts scaffold for “experienced authors”; complexity ramp; avoidance of elementary recaps.",
+        "Originality and perspective - novelty of framing; differentiation from common craft manuals (e.g., The Writer's Guide to Worldbuilding tropes).",
+        "Integration with creative workflow - linkage between theory and practice; whether sections align with real authorial processes.",
+        "Pedagogical design - balance of abstract ideas vs. illustrative models, exercises, or frameworks.",
+        "Internal symmetry - parallel structure between analogous sections (e.g., “building cultures” vs. “building politics”).",
+        "Tone and audience calibration - assumes authorial sophistication; avoids didactic or condescending tone.",
+        "Interdisciplinary rigor - application of history, anthropology, or systems theory; whether claims rest on coherent conceptual models.",
+        "Actionability - how each section yields usable outcomes for a working author.",
+        "Cohesion of thematic arc - whether book sustains a central thesis about what worldbuilding is or for.",
+    ];
+
+    let critique_tool = TypedTool::<ReviewResult>::create(
+        "submit_review",
+        "Submit a review of a document"
+    );
+    // We're going to use a lighter model here, since there are a lot of tokens.
+    // We could bump this back up later if we find it gives better results.
+    let review_model_id = ModelId::Gpt5Nano;
+
+    let mut review_entries: Vec<ReviewResult> = Vec::new();
+
+    println!("=== Generating reviews for the outline");
+    for (i,axis) in review_axes.iter().enumerate() {
+        println!("=== Requesting review {}/{} based on '{}'", i + 1, review_axes.len(), axis);
+
+        // Build the prompt - We structure it a little oddly, with content then task for two reasons.
+        // 1. LLMs can sometimes forget commands given at the start
+        // 2. The command will change each iteration, by putting unchanging content at the start
+        //    we allow prompt-caching to cut in, which for openAI reduces input token costs by a factor 
+        //    of 10 for the cached tokens.
+
+        let mut prompt = String::new();
+        writeln!(prompt, "The following is a document outline you will be asked to review.").unwrap();
+        writeln!(prompt, "").unwrap();
+        writeln!(prompt, "---").unwrap();
+        writeln!(prompt, "").unwrap();
+        writeln!(prompt, "{markdown}").unwrap();
+        writeln!(prompt, "").unwrap();
+        writeln!(prompt, "---").unwrap();
+        writeln!(prompt, "").unwrap();
+        writeln!(prompt, "Please review the structure of the outline focusing on '{axis}' and then submit the review using the provided function.").unwrap();
+        writeln!(prompt, "Ensure you provide a brief overall view of the outline's strengths and weaknesses, as well as concrete actionable suggestions to improve the outline.").unwrap();
+
+        // println!("{}", prompt);
+
+        let request: ChatRequest = ChatRequest::new(
+            review_model_id,
+            vec![
+                Message::user_message(prompt),
+            ],
+        ).with_instructions("Act as an expert book editor. Keep your responses succinct and actionable.".to_string());
+        let request = critique_tool.create_request(request);
+        let review: ReviewResult = request.make_request(&mut llm)?;
+        println!("*** review\n{:#?}", review);
+
+        review_entries.push(review);
+    } 
+
+    // Write all the reviews to a file for later analysis
+    let mut review_markdown = String::new();
+    review_markdown.push_str("# Review Results\n");
+    for (i, review) in review_entries.iter().enumerate() {
+        review_markdown.push_str(&format!("\n## Review {}\n\n", i + 1));
+        review_markdown.push_str(&format!("Focus Area: {}\n\n", review_axes[i]));
+        review_markdown.push_str("### Summary\n\n");
+        review_markdown.push_str(&format!("{}\n\n", review.summary));
+        review_markdown.push_str("### Suggestions\n\n");
+        for suggestion in &review.suggestions {
+            review_markdown.push_str(&format!("- {}\n", suggestion));
+        }
+    }
+    std::fs::write("review_results.md", &review_markdown)?;
+    println!("Reviews written to review_results.md");
+
+    // Combine reviews into a list of unique suggestions
+    let review_suggestions: ReviewSuggestions  = {
+        let mut prompt: Vec<String> = vec![
+            "The following are review suggestions for a book summary and chapter breakdown document. ",
+            "Your task is to combine these into a single list of unique, actionable suggestions, removing duplicates and merging similar points. ",
+            "Ensure the final list is clear and concise, suitable for guiding improvements to the document outline.",
+        ].iter().map(|s| s.to_string()).collect();
+
+        for(i, review) in review_entries.iter().enumerate() {
+            prompt.push(String::new());
+            prompt.push(format!("# Review {}\n\nFocus: {}\n\n{}", i + 1, review_axes[i], review.summary));
+            prompt.push("\nSuggestions:\n".to_string());
+            for suggestion in &review.suggestions {
+                prompt.push(format!("- {}", suggestion));
+            }
+        }
+        let prompt = prompt.join("\n");
+        println!("=== Combining review suggestions:\n{}", prompt);
+
+        let review_combine_tool = TypedTool::<ReviewSuggestions>::create(
+            "submit_review_suggestions",
+            "Submit a list of actionable review suggestions"
+        );
+
+        let request: ChatRequest = ChatRequest::new(
+            review_model_id,
+            vec![
+                Message::user_message(prompt),
+            ],
+        ).with_instructions("You are an expert book editor.".to_string());
+        let request = review_combine_tool.create_request(request);
+
+        let review: ReviewSuggestions = request.make_request(&mut llm)?;
+        // This Value should be a list, containing entries with "text" fields.
+        // We just want to join them together to get the complete summary.
+        print!("{:#?}", review);
+        review
+    };
+
+    // Now we want to rank these and select the top 5 fixes.
+    // We want to focus on high-impact and high-level suggestions.
+    let mut prompt = String::new();
+    writeln!(prompt, "The following are review suggestions for a book summary and chapter breakdown document:").unwrap();
+    writeln!(prompt, "").unwrap();
+    for suggestion in &review_suggestions.suggestions {
+        writeln!(prompt, "- {}", suggestion).unwrap();
+    }
+    writeln!(prompt, "").unwrap();
+    writeln!(prompt, "Please rank these suggestions based on their potential impact on improving the overall quality of the book summary and chapter breakdown. ").unwrap();
+    writeln!(prompt, "Focus on high-level, strategic changes rather than minor edits. ").unwrap();
+    writeln!(prompt, "Return the top 5 most impactful suggestions in order of importance. ").unwrap();
+
+    let review_suggestions_schema = JSONSchema(serde_json::to_value(schema_for!(ReviewSuggestions)).unwrap());
+    let review_tools = vec![Tool {
+        description: Some("Submit a list of actionable review suggestions".to_string()),
+        name: "submit_review_suggestions".to_string(),
+        parameters: Some(review_suggestions_schema.clone()),
+    }];
+
+    let request: ChatRequest = ChatRequest::new(
+        model_id,
+        vec![
+            Message::user_message(prompt),
+        ],
+    ).with_instructions("You are an expert book editor.".to_string())
+    .with_tools(review_tools.clone());
+    let (response, _is_from_cache) = llm.make_request(&request)?;
+    let review: ReviewSuggestions = get_tool_response(response, "submit_review_suggestions")?;
+    println!("RANKED SUGGESTIONS:\n");
+    for(i, suggestion) in review.suggestions.iter().enumerate() {
+        print!("{}. {}\n", i + 1, suggestion);
+    }
     Ok(())
 }

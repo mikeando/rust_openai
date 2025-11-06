@@ -55,8 +55,10 @@ impl ChatRequest {
         self
     }
 
+    // TODO: Not sure that this shouuld force tool_choice to Required
     pub fn with_tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
+        self.tool_choice = Some(ToolChoice::Required);
         self
     }
 
