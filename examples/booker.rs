@@ -11,11 +11,7 @@ use std::{fmt::Write, marker::PhantomData};
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct Outline {
-    chapters: Vec<ChapterOutline>,
-}
-
+/// Breakdown of a chapter into sections with overview, key points and notes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct ChapterOutline {
     /// chapter title, not including number.
@@ -23,22 +19,23 @@ struct ChapterOutline {
     /// chapter subtitle
     subtitle: String,
     /// chapter overview
-    overview: String,
+    overview: Option<String>,
+    /// sections in the chapter
+    sections: Option<Vec<SectionOutline>>,
+    /// notes for the chapter
+    notes: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct ChapterBreakdown {
-    chapter_index: u32,
-    chapter_title: String,
-    sections: Vec<SectionOutline>,
-}
-
+/// Outline for a single section of a book within a chapter
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct SectionOutline {
+    /// section title
     title: String,
+    /// key points in the section
     key_points: Vec<String>,
 }
 
+/// Response from a review submission
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct ReviewResult {
     // overall summary of strengths and weaknesses
@@ -48,9 +45,93 @@ struct ReviewResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct ReviewSuggestions {
-    // individual concrete review suggestions
-    suggestions: Vec<String>,
+struct BookOutline {
+    /// title of the book
+    title: Option<String>,
+    
+    /// subtitle of the book
+    subtitle: Option<String>,
+
+    /// high-level overview, in markdown format
+    overview: Option<String>,
+    
+    /// additional notes, each as a markdown paragraph.
+    notes: Option<Vec<String>>,
+
+    /// individual concrete review suggestions
+    chapters: Option<Vec<ChapterOutline>>,
+} 
+
+
+impl BookOutline {
+    pub fn render_to_markdown(&self) -> String {
+        let mut markdown = String::new();
+        write!(markdown, "# {}", self.title.as_deref().unwrap_or("Untitled book")).unwrap();
+        if let Some(subtitle) = &self.subtitle {
+            write!(markdown, ": {}", subtitle).unwrap();
+        }
+        writeln!(markdown, "\n").unwrap();
+        if let Some(overview) = &self.overview {
+            markdown.push_str("## Overview\n\n");
+            markdown.push_str(overview);
+            markdown.push_str("\n\n");
+        }
+
+        if let Some(notes) = &self.notes {
+            if notes.len() > 0 {
+                markdown.push_str("## Additional Notes\n\n");
+                for note in notes {
+                    markdown.push_str(&format!("{}\n\n", note));
+                }
+            }
+        }
+
+        if let Some(chapters) = &self.chapters {
+            for (i, chapter) in chapters.iter().enumerate() {
+                let chapter_markdown = chapter.render_to_markdown(i);
+                markdown.push_str(&chapter_markdown);
+            }
+        }
+        markdown
+    }
+}
+
+impl ChapterOutline {
+    pub fn render_to_markdown(&self, chapter_index: usize) -> String {
+        let mut markdown = String::new();
+        markdown.push_str(&format!(
+            "## Chapter {}: {} - {}\n\n",
+            chapter_index + 1,
+            self.title,
+            self.subtitle
+        ));
+        if let Some(overview) = &self.overview {
+            markdown.push_str("### Overview\n\n");
+            markdown.push_str(overview);
+            markdown.push_str("\n\n");
+        }
+        if let Some(sections) = &self.sections {
+            if sections.len() > 0 {
+                markdown.push_str("### Sections\n\n");
+                for section in sections {
+                    markdown.push_str(&format!("#### {}\n", section.title));
+                    for point in &section.key_points {
+                        markdown.push_str(&format!("- {}\n", point));
+                    }
+                    markdown.push_str("\n");
+                }
+            }
+        }
+        if let Some(notes) = &self.notes {
+            if notes.len() > 0 {
+                markdown.push_str("### Notes\n\n");
+                for note in notes {
+                    markdown.push_str(&format!("{}\n\n", note));
+                }
+            }
+        }
+        markdown
+    }
 }
 
 pub fn get_tool_response<T: serde::de::DeserializeOwned>(chat_completion_object: ChatCompletionObject, tool_name: &str) -> anyhow::Result<T> {
@@ -116,17 +197,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
     let model_id = ModelId::Gpt5Mini;
 
-    let outline_tool = TypedTool::<Outline>::create(
+    let outline_tool = TypedTool::<BookOutline>::create(
         "submit_outline",
         "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
     );
 
     let prompt = [
-        "Generate a outline for the following book, then submit it with the provided function:",
+        "Generate a chapter list for the following book, then submit it with the provided function:",
         "",
         "Subject matter: World building for fantasy and science fiction novels.",
         "",
-        "Target Audience: Professional and experiences authors looking to improve their world building skills."
+        "Target Audience: Professional and experienced authors looking to improve their world building skills.",
+        "",
+        "Only provide the chapter titles and subtitles in your response, other fields will be filled in later.",
     ].join("\n");
     let request = outline_tool.create_request(ChatRequest::new(
         model_id,
@@ -136,15 +219,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).with_instructions("You are a an expert book authoring AI.".to_string())
     );
 
-    let args: Outline = request.make_request(&mut llm)?;
+    let args = request.make_request(&mut llm)?;
     println!("=== Generated Outline:");
     println!("{:#?}", args);
+    println!("----");
+    println!("{}", args.render_to_markdown());
 
-    let mut overview = String::new();
-    for (i, c) in args.chapters.iter().enumerate() {
-        writeln!(overview, "Chapter {}: {} -- {}", i + 1, c.title, c.subtitle).unwrap();
-        writeln!(overview, "{}\n", c.overview).unwrap();
-    }
+    let mut overview = args.render_to_markdown();
+    writeln!(overview, "").unwrap();
+
     println!("=== Requesting book summary based on outline:");
     println!("{}", overview);
 
@@ -175,20 +258,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("=== Generated Book Summary:");
-    println!("{}", summary);
-    println!();
-    println!("{}", overview);
+    let mut args = args;
+    args.overview = Some(summary.clone());
+
+    println!("=== Generated Book Outline:");
+    println!("{}", args.render_to_markdown());
 
     // Write this to a file for reference
-    std::fs::write("book_overview.md", format!("{}\n\n{}", summary, overview))?;
+    std::fs::write("book_overview.md", args.render_to_markdown())?;
 
     // Break down the first chapter
     let mut chapter_breakdowns = Vec::new();
-    for chapter_index in 1..=args.chapters.len() {
+    let chapters = args.chapters.clone().unwrap();
+    for chapter_index in 1..=chapters.len() {
         println!("=== processing chapter {}", chapter_index);
 
-        let chapter_outline_tool = TypedTool::<ChapterBreakdown>::create(
+        let chapter_outline_tool = TypedTool::<ChapterOutline>::create(
             "submit_chapter_outline",
             "Submit a breakdown of a chapter into sections with key points."
         );
@@ -201,38 +286,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ).with_instructions("You are a an expert book authoring AI.".to_string());
         let request = chapter_outline_tool.create_request(request);
 
-        let breakdown: ChapterBreakdown = request.make_request(&mut llm)?;    
+        let breakdown = request.make_request(&mut llm)?;    
         chapter_breakdowns.push(breakdown);
     }
 
-    // Write results to markdown file
-    let mut markdown = String::new();
-    markdown.push_str("# Book Summary\n\n");
-    markdown.push_str(&summary);
-    markdown.push_str("\n\n# Chapters\n\n");
-    for (i, chapter) in args.chapters.iter().enumerate() {
-        markdown.push_str(&format!(
-            "## Chapter {}: {}\n\n**{}**\n\n{}\n\n",
-            i + 1,
-            chapter.title,
-            chapter.subtitle,
-            chapter.overview
-        ));
-        if let Some(breakdown) = chapter_breakdowns
-            .iter()
-            .find(|b| b.chapter_index as usize == i + 1)
-        {
-            markdown.push_str("### Sections\n\n");
-            for section in &breakdown.sections {
-                markdown.push_str(&format!("#### {}\n", section.title));
-                for point in &section.key_points {
-                    markdown.push_str(&format!("- {}\n", point));
-                }
-                markdown.push_str("\n");
-            }
-        }
-    }
-    std::fs::write("book_output.md", &markdown)?;
+    args.chapters = Some(chapter_breakdowns);
+
+    std::fs::write("book_output.md", &args.render_to_markdown())?;
     println!("Book written to book_output.md");
 
     //
@@ -289,7 +349,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         writeln!(prompt, "").unwrap();
         writeln!(prompt, "---").unwrap();
         writeln!(prompt, "").unwrap();
-        writeln!(prompt, "{markdown}").unwrap();
+        writeln!(prompt, "{}", args.render_to_markdown()).unwrap();
         writeln!(prompt, "").unwrap();
         writeln!(prompt, "---").unwrap();
         writeln!(prompt, "").unwrap();
@@ -328,7 +388,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Reviews written to review_results.md");
 
     // Combine reviews into a list of unique suggestions
-    let review_suggestions: ReviewSuggestions  = {
+    let review_suggestions: ReviewResult  = {
         let mut prompt: Vec<String> = vec![
             "The following are review suggestions for a book summary and chapter breakdown document. ",
             "Your task is to combine these into a single list of unique, actionable suggestions, removing duplicates and merging similar points. ",
@@ -346,7 +406,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let prompt = prompt.join("\n");
         println!("=== Combining review suggestions:\n{}", prompt);
 
-        let review_combine_tool = TypedTool::<ReviewSuggestions>::create(
+        let review_combine_tool = TypedTool::<ReviewResult>::create(
             "submit_review_suggestions",
             "Submit a list of actionable review suggestions"
         );
@@ -359,13 +419,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ).with_instructions("You are an expert book editor.".to_string());
         let request = review_combine_tool.create_request(request);
 
-        let review: ReviewSuggestions = request.make_request(&mut llm)?;
+        let review = request.make_request(&mut llm)?;
         // This Value should be a list, containing entries with "text" fields.
         // We just want to join them together to get the complete summary.
         print!("{:#?}", review);
         review
     };
 
+    /* 
     // Now we want to rank these and select the top 5 fixes.
     // We want to focus on high-impact and high-level suggestions.
     let mut prompt = String::new();
@@ -399,5 +460,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for(i, suggestion) in review.suggestions.iter().enumerate() {
         print!("{}. {}\n", i + 1, suggestion);
     }
+
+    {
+
+        let update_overview_tool = TypedTool::<RevisedOutline>::create(
+            "submit_revised_outline",
+            "Submits a reviesed book outline based on review suggestions"
+        );
+
+
+
+        // Apply the suggestions to the outline
+        println!("\n=== Applying Top Review Suggestions to Outline ===\n");
+        let mut markdown = markdown.clone();
+        for suggestion in review.suggestions.iter() {
+            let mut prompt = String::new();
+            writeln!(prompt, "The following is a book outline:").unwrap();
+            writeln!(prompt, "").unwrap();
+            writeln!(prompt, "---").unwrap();
+            writeln!(prompt, "").unwrap();
+            writeln!(prompt, "{markdown}").unwrap();
+            writeln!(prompt, "").unwrap();
+            writeln!(prompt, "---").unwrap();
+            writeln!(prompt, "").unwrap();
+            writeln!(prompt, "Please revise the outline based on the following suggestion:").unwrap();
+            writeln!(prompt, "{}", suggestion).unwrap();
+            writeln!(prompt, "").unwrap();
+            writeln!(prompt, "Return the revised outline, including an updated high-level overview in markdown format, a breakdown of chapters and sections, and any additional notes. Use the provided function to submit the revised outline.").unwrap();
+            writeln!(prompt, "Be sure that you include the complete revised outline and chapters. Do not just describe the changes you have made. Do not state a section is unchanged - include its original data.").unwrap();
+            let request: ChatRequest = ChatRequest::new(
+                model_id,
+            vec![
+                    Message::user_message(prompt),
+                ],
+            ).with_instructions("You are an expert book editing AI.".to_string());
+            let request = update_overview_tool.create_request(request);
+
+            let revised_outline: RevisedOutline = request.make_request(&mut llm).await?;
+            println!("*** revised outline\n{:#?}", revised_outline);
+            // Rebuild the markdown from the revised outline        
+            todo!("Rebuild the markdown from the revised outline");    
+
+            println!("=== Revised Outline after applying suggestion:\n{}", markdown);
+        }
+        std::fs::write("book_output_revised.md", &markdown)?;
+    }
+    */
     Ok(())
 }
