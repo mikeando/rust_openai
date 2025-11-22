@@ -1,4 +1,6 @@
 use anyhow::Context;
+use data_encoding::HEXLOWER;
+use ring::digest;
 use rust_openai::{
     request::OpenAILLM,
     types::{ChatCompletionObject, JSONSchema, Tool},
@@ -191,10 +193,7 @@ impl <T: JsonSchema + serde::de::DeserializeOwned> ModelToolRequest<T> {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
-    let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
-    let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
+fn create_initial_outline(llm: &mut OpenAILLM) -> anyhow::Result<BookOutline> {
     let model_id = ModelId::Gpt5Mini;
 
     let outline_tool = TypedTool::<BookOutline>::create(
@@ -219,11 +218,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).with_instructions("You are a an expert book authoring AI.".to_string())
     );
 
-    let args = request.make_request(&mut llm)?;
-    println!("=== Generated Outline:");
-    println!("{:#?}", args);
-    println!("----");
-    println!("{}", args.render_to_markdown());
+    let args = request.make_request(llm)?;
+    Ok(args)
+}
+
+fn create_book_summary_paragraph(llm: &mut OpenAILLM, args: BookOutline) -> anyhow::Result<BookOutline> {
+    let model_id = ModelId::Gpt5Mini;
 
     let mut overview = args.render_to_markdown();
     writeln!(overview, "").unwrap();
@@ -260,6 +260,231 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut args = args;
     args.overview = Some(summary.clone());
+    Ok(args)
+}
+
+fn generate_chapter_outline(llm: &mut OpenAILLM, args: &BookOutline, chapter_index: usize) -> anyhow::Result<ChapterOutline> {
+    let model_id = ModelId::Gpt5Mini;
+
+    println!("=== processing chapter {}", chapter_index);
+
+    let chapter_outline_tool = TypedTool::<ChapterOutline>::create(
+        "submit_chapter_outline",
+        "Submit a breakdown of a chapter into sections with key points."
+    );
+
+    let overview = args.render_to_markdown();
+
+    // TODO: Better structure the prompt for more reuse of the tokens.
+    let request: ChatRequest = ChatRequest::new(
+        model_id,
+        vec![
+            Message::user_message(format!("Create and submit a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}", chapter_index, overview)),
+        ],
+    ).with_instructions("You are a an expert book authoring AI.".to_string());
+    let request = chapter_outline_tool.create_request(request);
+
+    let breakdown = request.make_request(llm)?;    
+    Ok(breakdown)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepFile {
+    filename: String,
+    hash: String,
+}
+
+pub trait StepAction {
+    fn prep(&self, key: &str) -> anyhow::Result<StepState>;
+    fn execute(&self, key: &str) -> anyhow::Result<StepState>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepState {
+    key: String, 
+    inputs: Vec<StepFile>,
+    outputs: Option<Vec<StepFile>>,
+}
+
+pub struct Step {
+    description: String,
+    key: String,
+    action: Box<dyn StepAction>,
+}
+
+#[derive(Debug)]
+pub enum FileState {
+    Matching,
+    Missing,
+    Changed,
+}
+
+pub fn get_file_hash(filename: &str) -> anyhow::Result<String> {
+    let content = std::fs::read(filename)?;
+    let digest = digest::digest(&digest::SHA256, content.as_slice());
+    let full_hash = HEXLOWER.encode(digest.as_ref());
+    let actual_hash = &full_hash[0..32];
+    Ok(actual_hash.to_string())
+}
+
+pub fn get_file_state(filename: &str, expected_hash: &str) -> anyhow::Result<FileState> {
+    if !std::path::Path::new(filename).exists() {
+        return Ok(FileState::Missing);
+    }
+    let actual_hash = get_file_hash(filename)?;
+    if actual_hash == expected_hash {
+        Ok(FileState::Matching)
+    } else {
+        Ok(FileState::Changed)
+    }
+}
+
+// Priority is Missing > Changed > Matching
+pub fn get_input_state(inputs: &Vec<StepFile>) -> anyhow::Result<FileState> {
+    let mut any_missing = false;
+    let mut any_changed = false;
+    for input in inputs {
+        match get_file_state(&input.filename, &input.hash)? {
+            FileState::Missing => any_missing = true,
+            FileState::Changed => any_changed = true,
+            FileState::Matching => {}
+        }
+    }
+    match (any_missing, any_changed) {
+        (true, _) => Ok(FileState::Missing),
+        (false, true) => Ok(FileState::Changed),
+        (false, false) => Ok(FileState::Matching),
+    }
+}
+
+pub fn step(description: &str, key: &str, action: Box<dyn StepAction>) -> Step {
+    Step {
+        description: description.to_string(),
+        key: key.to_string(),
+        action,
+    }
+}
+
+// No-op implementation for StepAction
+struct NoOpStepAction;
+
+impl StepAction for NoOpStepAction {
+    fn prep(&self, key: &str) -> anyhow::Result<StepState> {
+        Ok(
+            StepState { key: key.to_string(), inputs:vec![], outputs: None}
+        )
+    }
+    fn execute(&self, key:&str) -> anyhow::Result<StepState> {
+        Ok(
+            StepState { key: key.to_string(), inputs: vec![], outputs: Some(vec![]) }
+        )
+    }
+}
+
+// What are possible step life-cycles
+// * NotYetInitialized
+//   - there is no corresponding JSON file.
+// * Initialized
+//   - json file exists, but has no outputs.
+//   - Two sub states:
+//     - Unedited - input files exist but match their generated values.
+//     - Edited - input files exist and do not match their generated values.
+// * Completed
+//   - json file exists and has outputs section
+//   - has many possible sub states - do we need to enumerate them?
+//     - Clean - inut and output value exist and match json entry
+//     - Dirty/Stale - input values have changed
+//     - Modified - output values have changed
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepLifecycle {
+    NotYetInitialized,
+    InitializedUnedited,
+    InitializedEdited,
+    Completed{
+        input_clean: bool,
+        output_clean: bool,
+    }
+}
+
+pub fn is_file_entry_clean(s: &StepFile) -> bool {
+    get_file_hash(&s.filename).map(|hash| hash == s.hash ).unwrap_or(false)
+}
+
+pub fn get_step_lifecycle(step: &Step) -> anyhow::Result<StepLifecycle> {
+    // Try load the JSON
+    let step_state_file = format!(".booker/{}.stepstate.json", step.key);
+    if ! std::path::Path::new(&step_state_file).exists() {
+        return Ok(StepLifecycle::NotYetInitialized);
+    }
+    let step_state: StepState = serde_json::from_reader(std::fs::File::open(&step_state_file)?)?;
+    if step_state.outputs.is_none() {
+        // have we changed the inputs?
+        for d in step_state.inputs {
+            let file_state = get_file_state(&d.filename, &d.hash)?;
+            if !matches!(file_state, FileState::Matching) {
+                return Ok(StepLifecycle::InitializedEdited);
+            }
+        }
+        return Ok(StepLifecycle::InitializedUnedited)
+    } else {
+        let input_clean = step_state.inputs.iter().all(is_file_entry_clean);
+        let output_clean = step_state.outputs.unwrap().iter().all(is_file_entry_clean);
+        Ok(StepLifecycle::Completed { input_clean, output_clean })
+    }
+}
+
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
+    let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
+    let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
+    let args = create_initial_outline(&mut llm)?;
+
+    let steps = vec![
+        step("Initialize the book statement", "initialize", Box::new(NoOpStepAction {})),
+        step("Generate book outline", "generate_outline", Box::new(NoOpStepAction {})),
+        step("Generate book summary paragraph", "generate_summary", Box::new(NoOpStepAction {})),
+        step("Generate chapter outlines", "generate_chapter_outlines", Box::new(NoOpStepAction {})),
+    ];
+
+    for step in &steps {
+        let lifecycle = get_step_lifecycle(step)?;
+        println!("Step '{}' lifecycle: {:?}", step.key, lifecycle);
+    }
+
+    // let key = "initialize";
+    // let action = "prep";
+    // let step = steps.iter().find(|s| s.key == key);
+    // let step = step.unwrap();
+    // if action == "prep" {
+    //     eprintln!("Prepping step = \"{}\"", key);
+    //     let step_state = step.action.prep(key).unwrap();
+    //     eprintln!("step result = {:?}", step_state);
+    //     // Write the result to the config file
+    //     let step_state_file = format!(".booker/{}.stepstate.json", step.key);
+    //     let step_state_json = serde_json::to_string(&step_state)?;
+    //     std::fs::write(step_state_file, step_state_json)?;
+    // } else if action == "run" {
+    //     eprintln!("Running step = \"{}\"", key);
+    //     let step_state = step.action.execute(key).unwrap();
+    //     eprintln!("step result = {:?}", step_state);
+    //     // Write the results to the config file
+    //     let step_state_file = format!(".booker/{}.stepstate.json", step.key);
+    //     let step_state_json = serde_json::to_string(&step_state)?;
+    //     std::fs::write(step_state_file, step_state_json)?;
+    // }
+
+
+    panic!("NYI");
+
+
+    println!("=== Generated Outline:");
+    println!("{:#?}", args);
+    println!("----");
+    println!("{}", args.render_to_markdown());
+
+    let mut args = create_book_summary_paragraph(&mut llm, args)?;
 
     println!("=== Generated Book Outline:");
     println!("{}", args.render_to_markdown());
@@ -267,27 +492,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write this to a file for reference
     std::fs::write("book_overview.md", args.render_to_markdown())?;
 
-    // Break down the first chapter
+    // Break down the chapters
+    // TODO: Parallelize this
     let mut chapter_breakdowns = Vec::new();
     let chapters = args.chapters.clone().unwrap();
     for chapter_index in 1..=chapters.len() {
-        println!("=== processing chapter {}", chapter_index);
-
-        let chapter_outline_tool = TypedTool::<ChapterOutline>::create(
-            "submit_chapter_outline",
-            "Submit a breakdown of a chapter into sections with key points."
-        );
-
-        let request: ChatRequest = ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(format!("Create and submit a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}\n\n{}\n", chapter_index, summary, overview )),
-            ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string());
-        let request = chapter_outline_tool.create_request(request);
-
-        let breakdown = request.make_request(&mut llm)?;    
-        chapter_breakdowns.push(breakdown);
+        chapter_breakdowns.push(generate_chapter_outline(&mut llm, &args, chapter_index)?);
     }
 
     args.chapters = Some(chapter_breakdowns);
