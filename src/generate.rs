@@ -43,6 +43,11 @@ impl GeneratorContext {
     }
 }
 
+impl Default for GeneratorContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 pub trait Generator<T> {
     fn gen(&self, context: &mut GeneratorContext) -> T;
 }

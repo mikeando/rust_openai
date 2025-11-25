@@ -1,4 +1,3 @@
-use reqwest::Client;
 use serde_json::json;
 use snafu::{OptionExt, ResultExt, Snafu};
 
@@ -7,13 +6,16 @@ use crate::json::ToJson;
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("Could not make http request to OpenAI"))]
-    Request { source: reqwest::Error },
+    Request { error: Box<ureq::Error> },
 
     #[snafu(display("Bad HTTP response status from OpenAI ({status})"))]
     Http { response_text: String, status: u16 },
 
     #[snafu(display("Returned JSON was not of the expected from: {reason}"))]
     Structure { reason: String },
+
+    #[snafu(display("Could not parse JSON response"))]
+    Json { source: std::io::Error },
 }
 
 struct EmbeddingRequest {
@@ -31,40 +33,32 @@ impl ToJson for EmbeddingRequest {
 }
 
 //TODO: Add a caching layer like we use for completion requests.
-pub async fn make_uncached_embedding_request(
+pub fn make_uncached_embedding_request(
     text: &str,
     openai_api_key: &str,
 ) -> Result<Vec<f32>, Error> {
-    let client = Client::new();
-
     let request = EmbeddingRequest {
         input: text.to_string(),
         model: "text-embedding-3-small".to_string(),
     };
 
-    let response = client
-        .post("https://api.openai.com/v1/embeddings")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", openai_api_key))
-        .json(&request.to_json())
-        .send()
-        .await
-        .context(RequestSnafu)?;
-
-    let response_status = response.status();
-    if !response_status.is_success() {
-        eprintln!("Error performing request!");
-        let response_text = response.text().await.unwrap();
-        eprintln!("---- raw response ---\n{}\n", response_text);
-        return HttpSnafu {
-            response_text,
-            status: response_status.as_u16(),
+    let response = match ureq::post("https://api.openai.com/v1/embeddings")
+        .set("Content-Type", "application/json")
+        .set("Authorization", &format!("Bearer {}", openai_api_key))
+        .send_json(request.to_json())
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(status, response)) => {
+            return HttpSnafu {
+                response_text: response.into_string().unwrap_or_default(),
+                status,
+            }
+            .fail()
         }
-        .fail();
-    }
+        Err(e) => return RequestSnafu { error: e }.fail(),
+    };
 
-    let response_text = response.text().await.unwrap();
-    let v: serde_json::Value = serde_json::from_str(&response_text).unwrap();
+    let v: serde_json::Value = response.into_json().context(JsonSnafu)?;
 
     let values = v["data"][0]["embedding"]
         .as_array()

@@ -1,16 +1,12 @@
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::{anyhow, bail};
-use async_trait::async_trait;
 use data_encoding::HEXLOWER;
-use reqwest::Client;
 use ring::digest;
 use serde_json::json;
-
-type AsyncMutex<T> = tokio::sync::Mutex<T>;
 
 use crate::{
     json::{FromJson, ToJson},
@@ -18,33 +14,32 @@ use crate::{
 };
 
 pub struct OpenAILLM {
-    requester: Arc<AsyncMutex<dyn RawRequester + Send>>,
-    cache: Arc<AsyncMutex<dyn RequestCache + Send>>,
+    requester: Arc<Mutex<dyn RawRequester + Send>>,
+    cache: Arc<Mutex<dyn RequestCache + Send>>,
 }
 
 impl OpenAILLM {
-    pub async fn with_defaults(openai_api_key: &str) -> anyhow::Result<OpenAILLM> {
+    pub fn with_defaults(openai_api_key: &str) -> anyhow::Result<OpenAILLM> {
         let openai_api_key = openai_api_key.to_string();
         let requester = OpenAIRawRequester { openai_api_key };
-        let requester = Arc::new(AsyncMutex::new(requester));
+        let requester = Arc::new(Mutex::new(requester));
         let fs = DefaultFS {};
-        let fs = Arc::new(AsyncMutex::new(fs));
-        let cache = DefaultRequestCache::new(fs, PathBuf::from("cache")).await?;
-        let cache = Arc::new(AsyncMutex::new(cache));
+        let fs = Arc::new(Mutex::new(fs));
+        let cache = DefaultRequestCache::new(fs, PathBuf::from("cache"))?;
+        let cache = Arc::new(Mutex::new(cache));
         Ok(OpenAILLM::new(requester, cache))
     }
 
     pub fn new(
-        requester: Arc<AsyncMutex<dyn RawRequester + Send>>,
-        cache: Arc<AsyncMutex<dyn RequestCache + Send>>,
+        requester: Arc<Mutex<dyn RawRequester + Send>>,
+        cache: Arc<Mutex<dyn RequestCache + Send>>,
     ) -> OpenAILLM {
         OpenAILLM { requester, cache }
     }
 }
 
-#[async_trait]
 pub trait RawRequester {
-    async fn make_uncached_request(
+    fn make_uncached_request(
         &mut self,
         request: &ChatRequest,
     ) -> anyhow::Result<ChatCompletionObject>;
@@ -54,40 +49,35 @@ pub struct OpenAIRawRequester {
     pub openai_api_key: String,
 }
 
-#[async_trait]
 impl RawRequester for OpenAIRawRequester {
-    async fn make_uncached_request(
+    fn make_uncached_request(
         &mut self,
         request: &ChatRequest,
     ) -> anyhow::Result<ChatCompletionObject> {
-        let client = Client::new();
+        let response = ureq::post("https://api.openai.com/v1/responses")
+            .set("Content-Type", "application/json")
+            .set("Authorization", &format!("Bearer {}", self.openai_api_key))
+            .send_json(request.to_json());
 
-        let response = client
-            .post("https://api.openai.com/v1/responses")
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.openai_api_key))
-            .json(&request.to_json())
-            .send()
-            .await?;
+        let response = match response {
+            Ok(response) => response,
+            Err(ureq::Error::Status(status, response)) => {
+                let response_text = response.into_string()?;
+                let v: serde_json::Value = serde_json::from_str(&response_text)?;
+                let error_message = &v["error"]["message"];
+                bail!(
+                    "Error making openai request: ({} {}) {}",
+                    status,
+                    "Unknown",
+                    error_message.as_str().unwrap_or("")
+                );
+            }
+            Err(e) => {
+                return Err(anyhow!("Error making request: {}", e));
+            }
+        };
 
-        let status = response.status();
-        if !status.is_success() {
-            // Try and see if we can divine the reason from the JSON,
-            // if we get any...
-            // TODO: If this doesn't work we should at least return what we do know
-            let response_text = response.text().await?;
-            let v: serde_json::Value = serde_json::from_str(&response_text)?;
-            let error_message = &v["error"]["message"];
-
-            bail!(
-                "Error making openai request: ({} {}) {}",
-                status.as_str(),
-                status.canonical_reason().unwrap_or("Unknown"),
-                error_message.as_str().unwrap_or("")
-            );
-        }
-
-        let response_text = response.text().await?;
+        let response_text = response.into_string()?;
         println!("DEBUG: Raw OpenAI response JSON: {}", response_text);
         let v: serde_json::Value = serde_json::from_str(&response_text)?;
         let response: ChatCompletionObject = ChatCompletionObject::from_json(&v)
@@ -96,14 +86,12 @@ impl RawRequester for OpenAIRawRequester {
     }
 }
 
-#[async_trait]
 pub trait RequestCache {
-    //TODO: Use a better Result type!
-    async fn get_response_if_cached(
+    fn get_response_if_cached(
         &self,
         request: &ChatRequest,
     ) -> anyhow::Result<Option<ChatCompletionObject>>;
-    async fn cache_response(
+    fn cache_response(
         &mut self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
@@ -117,25 +105,23 @@ pub enum TrivialFSPathType {
     Directory,
 }
 
-#[async_trait]
 pub trait TrivialFS {
-    async fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
-    async fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
-    async fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType>;
+    fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
+    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
+    fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType>;
 }
 
 pub struct DefaultFS {}
 
-#[async_trait]
 impl TrivialFS for DefaultFS {
-    async fn read_to_string(&self, p: &Path) -> anyhow::Result<String> {
+    fn read_to_string(&self, p: &Path) -> anyhow::Result<String> {
         Ok(std::fs::read_to_string(p)?)
     }
-    async fn write(&self, p: &Path, value: &str) -> anyhow::Result<()> {
+    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()> {
         std::fs::write(p, value)?;
         Ok(())
     }
-    async fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType> {
+    fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType> {
         use std::io::ErrorKind;
 
         let r = std::fs::metadata(p);
@@ -163,16 +149,16 @@ impl TrivialFS for DefaultFS {
 }
 
 pub struct DefaultRequestCache {
-    fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
+    fs: Arc<Mutex<dyn TrivialFS + Send>>,
     root: PathBuf,
 }
 
 impl DefaultRequestCache {
-    pub async fn new(
-        fs: Arc<AsyncMutex<dyn TrivialFS + Send>>,
+    pub fn new(
+        fs: Arc<Mutex<dyn TrivialFS + Send>>,
         root: PathBuf,
     ) -> anyhow::Result<DefaultRequestCache> {
-        let r = fs.lock().await.path_type(&root).await?;
+        let r = fs.lock().unwrap().path_type(&root)?;
         if r != TrivialFSPathType::Directory {
             bail!(
                 "DefaultRrequestCache::new failed - '{}' is not a directory",
@@ -186,7 +172,6 @@ impl DefaultRequestCache {
         let request_json = value.to_json();
         let request_str = request_json.to_string();
         let digest = digest::digest(&digest::SHA256, request_str.as_bytes());
-        // The key length is way too big for what we want.
         let full_key = HEXLOWER.encode(digest.as_ref());
         let key = &full_key[0..32];
         key.to_string()
@@ -197,22 +182,16 @@ impl DefaultRequestCache {
     }
 }
 
-#[async_trait]
 impl RequestCache for DefaultRequestCache {
-    async fn get_response_if_cached(
+    fn get_response_if_cached(
         &self,
         request: &ChatRequest,
     ) -> anyhow::Result<Option<ChatCompletionObject>> {
-        // First check if we have a cached result
         let key = self.key(request);
-
         let cache_file_path = self.key_to_path(&key);
 
-        // Open and read the cache file if it exists
-        if let Ok(content) = self.fs.lock().await.read_to_string(&cache_file_path).await {
-            // Convert the content to json
+        if let Ok(content) = self.fs.lock().unwrap().read_to_string(&cache_file_path) {
             let value: serde_json::Value = serde_json::from_str(&content)?;
-            // Get the request
             let cached_request = ChatRequest::from_json(&value["request"])
                 .map_err(|_e| anyhow!("unable to decode request"))?;
             let cached_response = ChatCompletionObject::from_json(&value["response"])
@@ -226,13 +205,12 @@ impl RequestCache for DefaultRequestCache {
         }
     }
 
-    async fn cache_response(
+    fn cache_response(
         &mut self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
     ) -> anyhow::Result<()> {
         let key = self.key(request);
-
         let cache_file_path = self.key_to_path(&key);
 
         let cache_entry = json!({
@@ -240,52 +218,34 @@ impl RequestCache for DefaultRequestCache {
             "response": response.to_json(),
         });
 
-        self.fs
-            .lock()
-            .await
-            .write(
-                &cache_file_path,
-                &serde_json::to_string_pretty(&cache_entry).unwrap(),
-            )
-            .await
-            .unwrap();
+        self.fs.lock().unwrap().write(
+            &cache_file_path,
+            &serde_json::to_string_pretty(&cache_entry).unwrap(),
+        )?;
 
         Ok(())
     }
 }
 
 impl OpenAILLM {
-    pub async fn make_request(
+    pub fn make_request(
         &mut self,
         request: &ChatRequest,
     ) -> anyhow::Result<(ChatCompletionObject, bool)> {
-        // First check if we have a cached result
-        if let Some(v) = self
-            .cache
-            .lock()
-            .await
-            .get_response_if_cached(request)
-            .await
-            .unwrap()
-        {
+        if let Some(v) = self.cache.lock().unwrap().get_response_if_cached(request)? {
             return Ok((v, true));
         }
 
-        // There is no cache value!
-        // Make the request
         let response = self
             .requester
             .lock()
-            .await
-            .make_uncached_request(request)
-            .await?;
+            .unwrap()
+            .make_uncached_request(request)?;
 
-        // Cache it for next time
         self.cache
             .lock()
-            .await
-            .cache_response(request, &response)
-            .await?;
+            .unwrap()
+            .cache_response(request, &response)?;
 
         Ok((response, false))
     }

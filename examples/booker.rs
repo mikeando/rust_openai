@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use std::fmt::Write;
 
-use rust_openai::json::ToJson;
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
 
@@ -36,11 +35,10 @@ struct SectionOutline {
     key_points: Vec<String>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
-    let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
+    let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
     let model_id = ModelId::Gpt5Mini;
 
     let schema2 = JSONSchema(serde_json::to_value(schema_for!(Outline)).unwrap());
@@ -61,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).with_instructions("You are a an expert book authoring AI.".to_string())
     .with_tools(tools);
 
-    let (response, _is_from_cache) = llm.make_request(&request).await?;
+    let (response, _is_from_cache) = llm.make_request(&request)?;
 
     let function_call_response = &response.output.iter().find(|c| {
         c.output_type.as_deref() == Some("function_call")
@@ -91,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     ).with_instructions("You are a an expert book authoring AI.".to_string());
 
-    let (response, _is_from_cache) = llm.make_request(&request).await?;
+    let (response, _is_from_cache) = llm.make_request(&request)?;
 
     let summary_response = &response
         .output
@@ -139,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ).with_instructions("You are a an expert book authoring AI.".to_string())
         .with_tools(tools);
 
-        let (response, _is_from_cache) = llm.make_request(&request).await?;
+        let (response, _is_from_cache) = llm.make_request(&request)?;
 
         let function_call_response = &response.output.iter().find(|c| {
             c.output_type.as_deref() == Some("function_call")
