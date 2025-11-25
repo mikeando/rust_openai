@@ -244,7 +244,7 @@ impl Generatable for ChatCompletionObject {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
 
     #[test]
     pub fn test_against_actual_response() {
