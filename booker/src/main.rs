@@ -1,7 +1,6 @@
 // --- CLI argument parsing (clap) ---
 use clap::{Parser, Subcommand};
 use std::fmt::Write as _;
-use std::io::Write as _;
 
 
 #[derive(Parser, Debug)]
@@ -35,11 +34,14 @@ use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, marker::PhantomData};
 
-use rust_openai::types::{ChatRequest, Message, ModelId};
+use rust_openai::types::ChatRequest;
 use std::env;
 
 mod steps;
-use steps::{RebuildBookOutlineJson, RebuildBookOutlineState};
+use steps::{
+    RebuildBookOutlineJson,
+    ProjectInit, BookStatement, GenerateSummaryParagraph, GenerateChapterOutlines
+};
 
 /// Configuration for the book authoring project
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,225 +430,6 @@ pub fn load_step_state(key: &str) -> anyhow::Result<Option<StepState>> {
 
 pub fn write_step_state(step_state: &StepState) -> anyhow::Result<()> {
     write_step_state_general(&step_state.key, step_state)
-}
-
-
-
-struct ProjectInit;
-
-impl StepAction for ProjectInit {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec![])
-    }
-
-    fn execute(&self, _key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-        // Create the config file
-        let config = ProjectConfig::default();
-        config.save()?;
-        
-        // Create the book highlevel file
-        let p = "book_highlevel.txt";
-        let mut f = std::fs::OpenOptions::new().create(true).write(true).open(p)?;
-        writeln!(f,"Subject matter: World building for fantasy and science fiction novels.")?;
-        writeln!(f)?;
-        writeln!(f, "Target Audience: Professional and experienced authors looking to improve their world building skills.")?;
-        drop(f);
-        
-        // Update proj config
-        proj.config = config;
-        
-        Ok(
-            StepState { key: "init".to_string(), inputs: vec![], outputs: vec![
-                StepFile::from_file(p)?,
-                StepFile::from_file(".booker/config.json")?
-            ] }
-        )
-    }
-}
-
-struct BookStatement;
-
-impl StepAction for BookStatement {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec!["book_highlevel.txt".to_string()])
-    }
-
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-
-        let model_id = ModelId::Gpt5Mini;
-
-        let outline_tool = create_book_outline_tool();
-
-        let content = std::fs::read("book_highlevel.txt")?;
-
-        let prompt = [
-            "Generate a chapter list for the following book, then submit it with the provided function:",
-            "",
-            std::str::from_utf8(&content)?,
-            "",
-            "Only provide the chapter titles and subtitles in your response, other fields will be filled in later.",
-        ].join("\n");
-        let request = outline_tool.create_request(ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(prompt),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone())
-        );
-
-        let args = request.make_request(&mut proj.llm)?;
-        // write the outline to file as markdown, and as JSON
-
-        let outline_markdown = args.render_to_markdown();
-        std::fs::write("book_outline.md", &outline_markdown)?;
-        std::fs::write("book_outline.json", serde_json::to_string_pretty(&args)?)?;
-        // TODO: Write a note associating the JSON with the outline so that we don't need to run the outline.md -> outline.json step.
-
-        let rebuild_state = RebuildBookOutlineState {
-            input_markdown_hash: get_file_hash("book_outline.md")?,
-            output_json_hash: get_file_hash("book_outline.json")?,
-        };
-        write_step_state_general("rebuild_outline_json_custom", &rebuild_state)?;
-
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_highlevel.txt")?
-            ], outputs: vec![
-                StepFile::from_file("book_outline.md")?,
-                StepFile::from_file("book_outline.json")?,
-            ] }
-        )
-    }
-}
-
-struct GenerateSummaryParagraph;
-
-impl StepAction for GenerateSummaryParagraph {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec![
-            "book_highlevel.txt".to_string(),
-            "book_outline.json".to_string()
-            ])
-    }
-
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-        let model_id = ModelId::Gpt5Mini;
-
-        // Load the outline from file
-        let outline_content = std::fs::read("book_outline.json")?;
-        let args: BookOutline = serde_json::from_slice(&outline_content)?;
-
-        let highlevel_content = String::from_utf8(std::fs::read("book_highlevel.txt")?)?;
-
-        let mut overview = args.render_to_markdown();
-        writeln!(overview, "").unwrap();
-
-        let request: ChatRequest = ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(format!("Generate a one paragraph description for the following book:\n\n{}\n\n{}", highlevel_content,overview)),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone());
-
-        let (response, _is_from_cache) = proj.llm.make_request(&request)?;
-
-        let summary_response = &response
-            .output
-            .iter()
-            .find(|c| c.output_type.as_deref() == Some("message"))
-            .unwrap();
-
-        let summary_pieces = summary_response.content.as_ref().unwrap();
-        // This Value should be a list, containing entries with "text" fields.
-        // We just want to join them together to get the complete summary.
-        let mut summary = String::new();
-        if let serde_json::Value::Array(pieces) = summary_pieces {
-            for piece in pieces {
-                if let Some(text) = piece.get("text").and_then(|t| t.as_str()) {
-                    summary.push_str(text);
-                }
-            }
-        }
-
-        let mut args = args;
-        args.overview = Some(summary.clone());
-        std::fs::write("book_outline_with_summary.json", serde_json::to_string_pretty(&args)?)?;
-        std::fs::write("book_outline_with_summary.md", args.render_to_markdown())?;
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline.json")?
-            ], outputs: vec![
-                StepFile::from_file("book_outline_with_summary.json")?,
-                StepFile::from_file("book_outline_with_summary.md")?,
-            ] }
-        )
-    }
-}
-
-struct GenerateChapterOutlines;
-
-impl GenerateChapterOutlines {
-    fn generate_chapter_outline(&self, proj: &mut ProjectData, args: &BookOutline, chapter_index: usize) -> anyhow::Result<ChapterOutline> {
-        let model_id = ModelId::Gpt5Mini;
-
-        println!("=== processing chapter {}", chapter_index);
-
-        let chapter_outline_tool = TypedTool::<ChapterOutline>::create(
-            "submit_chapter_outline",
-            "Submit a breakdown of a chapter into sections with key points."
-        );
-
-        let overview = args.render_to_markdown();
-
-        // TODO: Better structure the prompt for more reuse of the tokens.
-        let request: ChatRequest = ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(format!("Create and submit a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}", chapter_index, overview)),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone());
-        let request = chapter_outline_tool.create_request(request);
-
-        let breakdown = request.make_request(&mut proj.llm)?;    
-        Ok(breakdown)
-    }
-}
-
-impl StepAction for GenerateChapterOutlines {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec![
-            "book_outline_with_summary.json".to_string()
-            ])
-    }
-
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-        // let model_id = ModelId::Gpt5Mini;
-        // Load the outline from file
-        let outline_content = std::fs::read("book_outline_with_summary.json")?;
-        let mut args: BookOutline = serde_json::from_slice(&outline_content)?;
-
-        // Break down the chapters
-        // TODO: Parallelize this
-        let mut chapter_breakdowns = Vec::new();
-        let chapters = args.chapters.clone().unwrap();
-        for chapter_index in 1..=chapters.len() {
-            chapter_breakdowns.push(self.generate_chapter_outline(proj, &args, chapter_index)?);
-        }
-        args.chapters = Some(chapter_breakdowns);
-
-        std::fs::write("book_output_with_chapters.json", serde_json::to_string_pretty(&args)?)?;
-        std::fs::write("book_output_with_chapters.md", &args.render_to_markdown())?;
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline_with_summary.json")?
-            ], outputs: vec![
-                StepFile::from_file("book_output_with_chapters.json")?,
-                StepFile::from_file("book_output_with_chapters.md")?,
-            ] }
-        )
-    }
-
-
 }
 
 
