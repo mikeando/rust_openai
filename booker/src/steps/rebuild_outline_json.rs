@@ -7,12 +7,37 @@ use crate::{
     get_file_hash, load_step_state_general, try_get_file_hash, write_step_state_general,
 };
 
+/// State tracking for markdown-to-JSON rebuild operations.
+///
+/// Stores file hashes to detect when input markdown has changed and
+/// determine if the JSON output needs to be regenerated.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RebuildBookOutlineState {
+    /// Hash of the input markdown file
     pub input_markdown_hash: String,
+    /// Hash of the output JSON file
     pub output_json_hash: String,
 }
 
+/// Convert markdown book outline to structured JSON format.
+///
+/// This step uses AI to parse a markdown representation of a book outline
+/// and convert it into a structured JSON format. It's designed to be reusable
+/// for multiple markdown-to-JSON conversion scenarios.
+///
+/// # Use Cases
+/// - Regenerate JSON after manual edits to markdown files
+/// - Convert human-readable outlines into machine-processable format
+/// - Maintain synchronization between markdown and JSON representations
+///
+/// # Smart Caching
+/// Uses file hash comparison to avoid unnecessary regeneration:
+/// - Tracks input markdown hash and output JSON hash
+/// - Only reruns if markdown has changed or JSON is missing/modified
+/// - Returns `CompleteRunnable` if hashes match (no action needed)
+///
+/// # AI Model
+/// Uses GPT-5 Nano (faster, cheaper) since this is a straightforward conversion task.
 pub struct RebuildBookOutlineJson {
     input_md: String,
     output_json: String,
@@ -20,6 +45,21 @@ pub struct RebuildBookOutlineJson {
 }
 
 impl RebuildBookOutlineJson {
+    /// Create a new markdown-to-JSON rebuild step.
+    ///
+    /// # Arguments
+    /// - `input_md` - Path to the input markdown file
+    /// - `output_json` - Path to the output JSON file
+    /// - `state_key` - Unique key for tracking this step's state
+    ///
+    /// # Example
+    /// ```ignore
+    /// let step = RebuildBookOutlineJson::new(
+    ///     "book_outline.md",
+    ///     "book_outline.json",
+    ///     "rebuild_outline_json"
+    /// );
+    /// ```
     pub fn new(input_md: &str, output_json: &str, state_key: &str) -> Self {
         Self {
             input_md: input_md.to_string(),

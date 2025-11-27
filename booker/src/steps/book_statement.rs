@@ -5,6 +5,23 @@ use crate::{
 };
 use rust_openai::types::{ChatRequest, Message, ModelId};
 
+/// Generate initial book outline from high-level description.
+///
+/// Uses AI to analyze the book's subject matter and target audience,
+/// then generates a structured chapter list with titles and subtitles.
+///
+/// # Inputs
+/// - `book_highlevel.txt` - High-level book description with subject matter and audience
+///
+/// # Outputs
+/// - `book_outline.md` - Markdown representation of the chapter outline
+/// - `book_outline.json` - Structured JSON representation of the outline
+///
+/// # AI Model
+/// Uses GPT-5 Mini for outline generation.
+///
+/// # Notes
+/// This step also initializes the rebuild state for tracking subsequent markdown-to-JSON conversions.
 pub struct BookStatement;
 
 impl StepAction for BookStatement {

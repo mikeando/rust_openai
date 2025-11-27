@@ -2,6 +2,28 @@ use crate::{BookOutline, ProjectData, StepAction, StepFile, StepState};
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::fmt::Write;
 
+/// Generate a one-paragraph book summary.
+///
+/// Uses AI to create a concise, professional summary of the book based on
+/// the high-level description and the chapter outline. This summary provides
+/// an overview of what the book will cover.
+///
+/// # Inputs
+/// - `book_highlevel.txt` - Original high-level book description
+/// - `book_outline.json` - Structured chapter outline
+///
+/// # Outputs
+/// - `book_outline_with_summary.json` - Outline augmented with the overview paragraph
+/// - `book_outline_with_summary.md` - Markdown representation with summary
+///
+/// # AI Model
+/// Uses GPT-5 Mini for summary generation.
+///
+/// # Process
+/// 1. Loads the existing book outline
+/// 2. Combines high-level description with chapter overview
+/// 3. Prompts AI to generate a one-paragraph description
+/// 4. Augments the outline with the generated summary
 pub struct GenerateSummaryParagraph;
 
 impl StepAction for GenerateSummaryParagraph {

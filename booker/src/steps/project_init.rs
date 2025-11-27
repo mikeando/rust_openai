@@ -1,6 +1,17 @@
 use crate::{ProjectConfig, ProjectData, StepAction, StepFile, StepState};
 use std::io::Write;
 
+/// Initial project setup step.
+///
+/// Creates the necessary project configuration files and initializes
+/// the workspace for a new book authoring project.
+///
+/// # Outputs
+/// - `.booker/config.json` - Project configuration with AI instructions
+/// - `book_highlevel.txt` - Initial high-level book description with subject matter and target audience
+///
+/// # Example
+/// This step is typically run first when starting a new book project.
 pub struct ProjectInit;
 
 impl StepAction for ProjectInit {
