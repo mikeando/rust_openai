@@ -38,6 +38,9 @@ use std::{collections::HashMap, marker::PhantomData};
 use rust_openai::types::{ChatRequest, Message, ModelId};
 use std::env;
 
+mod steps;
+use steps::{RebuildBookOutlineJson, RebuildBookOutlineState};
+
 /// Breakdown of a chapter into sections with overview, key points and notes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct ChapterOutline {
@@ -471,184 +474,6 @@ impl StepAction for BookStatement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct RebuildBookOutlineState {
-    input_markdown_hash: String,
-    output_json_hash: String,
-}
-
-struct RebuildBookOutlineJson;
-
-impl StepAction for RebuildBookOutlineJson {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec!["book_outline.md".to_string()])
-    }
-
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-        let model_id = ModelId::Gpt5Nano;
-        let outline_tool = TypedTool::<BookOutline>::create(
-            "submit_outline",
-            "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
-        );
-        let content = std::fs::read("book_outline.md")?;
-
-        let prompt = [
-            "Submit the partial book summary below to the subnission function. Do not make any changes, just resubmit it as-is:",
-            "",
-            "---",
-            "",
-            std::str::from_utf8(&content)?,
-            "",
-            "---",
-            "",
-            "NOTE: Not all fields of the outline need to be filled in yet - only those actually present in the markdown.",
-        ].join("\n");
-
-                let request = outline_tool.create_request(ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(prompt),
-            ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string())
-        );
-
-        let args = request.make_request(&mut proj.llm)?;
-        std::fs::write("book_outline.json", serde_json::to_string_pretty(&args)?)?;
-        let rebuild_state = RebuildBookOutlineState {
-            input_markdown_hash: get_file_hash("book_outline.md")?,
-            output_json_hash: get_file_hash("book_outline.json")?,
-        };
-        write_step_state_general("rebuild_outline_json_custom", &rebuild_state)?;
-
-
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline.md")?
-            ], outputs: vec![
-                StepFile::from_file("book_outline.json")?,
-            ] }
-        )
-    }
-
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        // This step is a bit different...
-        // it is done if 
-        //   * the input and output files exist and their hashes match the stored values.
-        // otherwise it is not done.
-        
-        // check if the input/output files exist
-        let markdown_hash = try_get_file_hash("book_outline.md")?;
-        let json_hash = try_get_file_hash("book_outline.json")?;
-
-        // Load the step metadata
-        let step_state: Option<RebuildBookOutlineState> = load_step_state_general("rebuild_outline_json_custom")?;
-
-        match (step_state, markdown_hash, json_hash) {
-            (None, None, None) => Ok(StepLifecycle::NotRunnable(vec![
-                "book_outline.md".to_string(),
-            ])),
-            (Some(state), Some(md_hash), Some(j_hash)) => {
-                if state.input_markdown_hash == md_hash && state.output_json_hash == j_hash {
-                    // TODO: Differentiate these states better?
-                    Ok(StepLifecycle::CompleteRunnable)
-                } else {
-                    Ok(StepLifecycle::Runnable)
-                }
-            },
-            (_, Some(_), _) => Ok(StepLifecycle::Runnable),
-            (_, None, _) => Ok(StepLifecycle::NotRunnable(vec![
-                "book_outline.md".to_string(),
-            ]))
-        }
-    }
-}
-
-
-struct RebuildBookOutlineJson2;
-
-impl StepAction for RebuildBookOutlineJson2 {
-    fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec!["book_outline_with_summary.md".to_string()])
-    }
-
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-        let model_id = ModelId::Gpt5Nano;
-        let outline_tool = TypedTool::<BookOutline>::create(
-            "submit_outline",
-            "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
-        );
-        let content = std::fs::read("book_outline_with_summary.md")?;
-
-        let prompt = [
-            "Submit the partial book summary below to the subnission function. Do not make any changes, just resubmit it as-is:",
-            "",
-            "---",
-            "",
-            std::str::from_utf8(&content)?,
-            "",
-            "---",
-            "",
-            "NOTE: Not all fields of the outline need to be filled in yet - only those actually present in the markdown.",
-        ].join("\n");
-
-                let request = outline_tool.create_request(ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(prompt),
-            ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string())
-        );
-
-        let args = request.make_request(&mut proj.llm)?;
-        std::fs::write("book_outline_with_summary.json", serde_json::to_string_pretty(&args)?)?;
-        let rebuild_state = RebuildBookOutlineState {
-            input_markdown_hash: get_file_hash("book_outline_with_summary.md")?,
-            output_json_hash: get_file_hash("book_outline_with_summary.json")?,
-        };
-        write_step_state_general("rebuild_outline_json_2_custom", &rebuild_state)?;
-
-
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline_with_summary.md")?
-            ], outputs: vec![
-                StepFile::from_file("book_outline_with_summary.json")?,
-            ] }
-        )
-    }
-
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        // This step is a bit different...
-        // it is done if 
-        //   * the input and output files exist and their hashes match the stored values.
-        // otherwise it is not done.
-        
-        // check if the input/output files exist
-        let markdown_hash = try_get_file_hash("book_outline_with_summary.md")?;
-        let json_hash = try_get_file_hash("book_outline_with_summary.json")?;
-
-        // Load the step metadata
-        let step_state: Option<RebuildBookOutlineState> = load_step_state_general("rebuild_outline_json_2_custom")?;
-        match (step_state, markdown_hash, json_hash) {
-            (None, None, None) => Ok(StepLifecycle::NotRunnable(vec![
-                "book_outline_with_summary.md".to_string(),
-            ])),
-            (Some(state), Some(md_hash), Some(j_hash)) => {
-                if state.input_markdown_hash == md_hash && state.output_json_hash == j_hash {
-                    // TODO: Differentiate these states better?
-                    Ok(StepLifecycle::CompleteRunnable)
-                } else {
-                    Ok(StepLifecycle::Runnable)
-                }
-            },
-            (_, Some(_), _) => Ok(StepLifecycle::Runnable),
-            (_, None, _) => Ok(StepLifecycle::NotRunnable(vec![
-                "book_outline_with_summary.md".to_string(),
-            ]))
-        }
-    }
-}
-
 struct GenerateSummaryParagraph;
 
 impl StepAction for GenerateSummaryParagraph {
@@ -793,9 +618,25 @@ fn all_steps() -> Vec<Step> {
     vec![
         step("Initialize the project", "init", Box::new(ProjectInit)),
         step("Initialize the book statement", "initialize", Box::new(BookStatement)),
-        step("rebuild book_outline JSON from markdown", "rebuild_outline_json", Box::new(RebuildBookOutlineJson {})),
+        step(
+            "Rebuild book_outline JSON from markdown",
+            "rebuild_outline_json",
+            Box::new(RebuildBookOutlineJson::new(
+                "book_outline.md",
+                "book_outline.json",
+                "rebuild_outline_json_custom"
+            ))
+        ),
         step("Generate summary paragraph", "generate_summary", Box::new(GenerateSummaryParagraph {})),
-        step("rebuild book_outline JSON from markdown", "rebuild_outline_json", Box::new(RebuildBookOutlineJson2 {})),
+        step(
+            "Rebuild book_outline_with_summary JSON from markdown",
+            "rebuild_outline_json_2",
+            Box::new(RebuildBookOutlineJson::new(
+                "book_outline_with_summary.md",
+                "book_outline_with_summary.json",
+                "rebuild_outline_json_2_custom"
+            ))
+        ),
         step("Generate chapter outlines", "generate_chapter_outlines", Box::new(GenerateChapterOutlines {})),
     ]
 }
