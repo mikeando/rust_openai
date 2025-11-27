@@ -108,7 +108,7 @@ struct ReviewResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct BookOutline {
+pub struct BookOutline {
     /// title of the book
     title: Option<String>,
     
@@ -209,7 +209,7 @@ pub fn get_tool_response<T: serde::de::DeserializeOwned>(chat_completion_object:
     Ok(args)
 }
 
-struct TypedTool<T> {
+pub struct TypedTool<T> {
     _t: PhantomData<T>,
     tool: Tool,
 }
@@ -232,6 +232,15 @@ impl<T: JsonSchema + serde::de::DeserializeOwned> TypedTool<T> {
     pub fn create_request(&self, request: ChatRequest) -> ModelToolRequest<T> {
         ModelToolRequest::with_tool(request, self  )
     }
+}
+
+/// Factory function to create the standard BookOutline tool used across multiple steps.
+/// This ensures consistency in tool naming and description.
+pub fn create_book_outline_tool() -> TypedTool<BookOutline> {
+    TypedTool::<BookOutline>::create(
+        "submit_outline",
+        "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
+    )
 }
 
 struct ModelToolRequest<T> {
@@ -466,10 +475,7 @@ impl StepAction for BookStatement {
 
         let model_id = ModelId::Gpt5Mini;
 
-        let outline_tool = TypedTool::<BookOutline>::create(
-            "submit_outline",
-            "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
-        );
+        let outline_tool = create_book_outline_tool();
 
         let content = std::fs::read("book_highlevel.txt")?;
 

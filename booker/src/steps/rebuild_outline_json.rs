@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use rust_openai::types::{ChatRequest, Message, ModelId};
 
 use crate::{
-    BookOutline, ProjectData, StepAction, StepFile, StepLifecycle, StepState,
-    TypedTool, get_file_hash, load_step_state_general, try_get_file_hash,
-    write_step_state_general,
+    ProjectData, StepAction, StepFile, StepLifecycle, StepState,
+    create_book_outline_tool, get_file_hash, load_step_state_general, 
+    try_get_file_hash, write_step_state_general,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,12 +35,9 @@ impl StepAction for RebuildBookOutlineJson {
         Ok(vec![self.input_md.clone()])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> Result<StepState> {
+    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
         let model_id = ModelId::Gpt5Nano;
-        let outline_tool = TypedTool::<BookOutline>::create(
-            "submit_outline",
-            "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
-        );
+        let outline_tool = create_book_outline_tool();
         let content = std::fs::read(&self.input_md)?;
 
         let prompt = [
