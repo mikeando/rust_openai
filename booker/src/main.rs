@@ -275,8 +275,13 @@ pub struct ProjectData {
 
 pub trait StepAction {
     fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>>;
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle>;
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState>;
+    
+    /// Default implementation based on input files and step state JSON.
+    /// Override this method for steps that need custom lifecycle logic.
+    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
+        Step::get_lifecycle_by_files_and_state_json(&self.input_files(key)?, key)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -448,12 +453,6 @@ impl StepAction for ProjectInit {
             ] }
         )
     }
-    
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        Step::get_lifecycle_by_files_and_state_json(&self.input_files(key)?, key)
-    }
-
-    
 }
 
 struct BookStatement;
@@ -512,10 +511,6 @@ impl StepAction for BookStatement {
             ] }
         )
     }
-
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        Step::get_lifecycle_by_files_and_state_json(&self.input_files(key)?, key)
-    }
 }
 
 struct GenerateSummaryParagraph;
@@ -526,10 +521,6 @@ impl StepAction for GenerateSummaryParagraph {
             "book_highlevel.txt".to_string(),
             "book_outline.json".to_string()
             ])
-    }
-
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        Step::get_lifecycle_by_files_and_state_json(&self.input_files(key)?, key)
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
@@ -620,10 +611,6 @@ impl StepAction for GenerateChapterOutlines {
         Ok(vec![
             "book_outline_with_summary.json".to_string()
             ])
-    }
-
-    fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
-        Step::get_lifecycle_by_files_and_state_json(&self.input_files(key)?, key)
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
