@@ -1,11 +1,10 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use rust_openai::types::{ChatRequest, Message, ModelId};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    ProjectData, StepAction, StepFile, StepLifecycle, StepState,
-    create_book_outline_tool, get_file_hash, load_step_state_general, 
-    try_get_file_hash, write_step_state_general,
+    ProjectData, StepAction, StepFile, StepLifecycle, StepState, create_book_outline_tool,
+    get_file_hash, load_step_state_general, try_get_file_hash, write_step_state_general,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,12 +51,9 @@ impl StepAction for RebuildBookOutlineJson {
             "NOTE: Not all fields of the outline need to be filled in yet - only those actually present in the markdown.",
         ].join("\n");
 
-        let request = outline_tool.create_request(ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(prompt),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone())
+        let request = outline_tool.create_request(
+            ChatRequest::new(model_id, vec![Message::user_message(prompt)])
+                .with_instructions(proj.config.ai_instruction.clone()),
         );
 
         let args = request.make_request(&mut proj.llm)?;
@@ -68,25 +64,19 @@ impl StepAction for RebuildBookOutlineJson {
         };
         write_step_state_general(&self.state_key, &rebuild_state)?;
 
-        Ok(
-            StepState { 
-                key: key.to_string(), 
-                inputs: vec![
-                    StepFile::from_file(&self.input_md)?
-                ], 
-                outputs: vec![
-                    StepFile::from_file(&self.output_json)?,
-                ] 
-            }
-        )
+        Ok(StepState {
+            key: key.to_string(),
+            inputs: vec![StepFile::from_file(&self.input_md)?],
+            outputs: vec![StepFile::from_file(&self.output_json)?],
+        })
     }
 
     fn get_lifecycle(&self, _key: &str) -> Result<StepLifecycle> {
         // This step is a bit different...
-        // it is done if 
+        // it is done if
         //   * the input and output files exist and their hashes match the stored values.
         // otherwise it is not done.
-        
+
         // check if the input/output files exist
         let markdown_hash = try_get_file_hash(&self.input_md)?;
         let json_hash = try_get_file_hash(&self.output_json)?;
@@ -95,9 +85,7 @@ impl StepAction for RebuildBookOutlineJson {
         let step_state: Option<RebuildBookOutlineState> = load_step_state_general(&self.state_key)?;
 
         match (step_state, markdown_hash, json_hash) {
-            (None, None, None) => Ok(StepLifecycle::NotRunnable(vec![
-                self.input_md.clone(),
-            ])),
+            (None, None, None) => Ok(StepLifecycle::NotRunnable(vec![self.input_md.clone()])),
             (Some(state), Some(md_hash), Some(j_hash)) => {
                 if state.input_markdown_hash == md_hash && state.output_json_hash == j_hash {
                     // TODO: Differentiate these states better?
@@ -105,11 +93,9 @@ impl StepAction for RebuildBookOutlineJson {
                 } else {
                     Ok(StepLifecycle::Runnable)
                 }
-            },
+            }
             (_, Some(_), _) => Ok(StepLifecycle::Runnable),
-            (_, None, _) => Ok(StepLifecycle::NotRunnable(vec![
-                self.input_md.clone(),
-            ]))
+            (_, None, _) => Ok(StepLifecycle::NotRunnable(vec![self.input_md.clone()])),
         }
     }
 }

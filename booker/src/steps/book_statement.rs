@@ -1,7 +1,9 @@
-use rust_openai::types::{ChatRequest, Message, ModelId};
-use crate::{StepAction, StepState, StepFile, ProjectData, create_book_outline_tool, get_file_hash};
 use crate::steps::rebuild_outline_json::RebuildBookOutlineState;
 use crate::write_step_state_general;
+use crate::{
+    ProjectData, StepAction, StepFile, StepState, create_book_outline_tool, get_file_hash,
+};
+use rust_openai::types::{ChatRequest, Message, ModelId};
 
 pub struct BookStatement;
 
@@ -11,7 +13,6 @@ impl StepAction for BookStatement {
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
-
         let model_id = ModelId::Gpt5Mini;
 
         let outline_tool = create_book_outline_tool();
@@ -25,12 +26,9 @@ impl StepAction for BookStatement {
             "",
             "Only provide the chapter titles and subtitles in your response, other fields will be filled in later.",
         ].join("\n");
-        let request = outline_tool.create_request(ChatRequest::new(
-            model_id,
-            vec![
-                Message::user_message(prompt),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone())
+        let request = outline_tool.create_request(
+            ChatRequest::new(model_id, vec![Message::user_message(prompt)])
+                .with_instructions(proj.config.ai_instruction.clone()),
         );
 
         let args = request.make_request(&mut proj.llm)?;
@@ -47,13 +45,13 @@ impl StepAction for BookStatement {
         };
         write_step_state_general("rebuild_outline_json_custom", &rebuild_state)?;
 
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_highlevel.txt")?
-            ], outputs: vec![
+        Ok(StepState {
+            key: key.to_string(),
+            inputs: vec![StepFile::from_file("book_highlevel.txt")?],
+            outputs: vec![
                 StepFile::from_file("book_outline.md")?,
                 StepFile::from_file("book_outline.json")?,
-            ] }
-        )
+            ],
+        })
     }
 }

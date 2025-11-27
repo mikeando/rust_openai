@@ -1,17 +1,22 @@
+use crate::{BookOutline, ChapterOutline, ProjectData, StepAction, StepFile, StepState, TypedTool};
 use rust_openai::types::{ChatRequest, Message, ModelId};
-use crate::{StepAction, StepState, StepFile, ProjectData, BookOutline, ChapterOutline, TypedTool};
 
 pub struct GenerateChapterOutlines;
 
 impl GenerateChapterOutlines {
-    fn generate_chapter_outline(&self, proj: &mut ProjectData, args: &BookOutline, chapter_index: usize) -> anyhow::Result<ChapterOutline> {
+    fn generate_chapter_outline(
+        &self,
+        proj: &mut ProjectData,
+        args: &BookOutline,
+        chapter_index: usize,
+    ) -> anyhow::Result<ChapterOutline> {
         let model_id = ModelId::Gpt5Mini;
 
         println!("=== processing chapter {}", chapter_index);
 
         let chapter_outline_tool = TypedTool::<ChapterOutline>::create(
             "submit_chapter_outline",
-            "Submit a breakdown of a chapter into sections with key points."
+            "Submit a breakdown of a chapter into sections with key points.",
         );
 
         let overview = args.render_to_markdown();
@@ -25,16 +30,14 @@ impl GenerateChapterOutlines {
         ).with_instructions(proj.config.ai_instruction.clone());
         let request = chapter_outline_tool.create_request(request);
 
-        let breakdown = request.make_request(&mut proj.llm)?;    
+        let breakdown = request.make_request(&mut proj.llm)?;
         Ok(breakdown)
     }
 }
 
 impl StepAction for GenerateChapterOutlines {
     fn input_files(&self, _key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec![
-            "book_outline_with_summary.json".to_string()
-            ])
+        Ok(vec!["book_outline_with_summary.json".to_string()])
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
@@ -52,15 +55,18 @@ impl StepAction for GenerateChapterOutlines {
         }
         args.chapters = Some(chapter_breakdowns);
 
-        std::fs::write("book_output_with_chapters.json", serde_json::to_string_pretty(&args)?)?;
+        std::fs::write(
+            "book_output_with_chapters.json",
+            serde_json::to_string_pretty(&args)?,
+        )?;
         std::fs::write("book_output_with_chapters.md", &args.render_to_markdown())?;
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline_with_summary.json")?
-            ], outputs: vec![
+        Ok(StepState {
+            key: key.to_string(),
+            inputs: vec![StepFile::from_file("book_outline_with_summary.json")?],
+            outputs: vec![
                 StepFile::from_file("book_output_with_chapters.json")?,
                 StepFile::from_file("book_output_with_chapters.md")?,
-            ] }
-        )
+            ],
+        })
     }
 }

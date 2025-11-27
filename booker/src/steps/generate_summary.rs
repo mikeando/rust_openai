@@ -1,6 +1,6 @@
-use std::fmt::Write;
+use crate::{BookOutline, ProjectData, StepAction, StepFile, StepState};
 use rust_openai::types::{ChatRequest, Message, ModelId};
-use crate::{StepAction, StepState, StepFile, ProjectData, BookOutline};
+use std::fmt::Write;
 
 pub struct GenerateSummaryParagraph;
 
@@ -8,8 +8,8 @@ impl StepAction for GenerateSummaryParagraph {
     fn input_files(&self, _key: &str) -> anyhow::Result<Vec<String>> {
         Ok(vec![
             "book_highlevel.txt".to_string(),
-            "book_outline.json".to_string()
-            ])
+            "book_outline.json".to_string(),
+        ])
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
@@ -26,10 +26,12 @@ impl StepAction for GenerateSummaryParagraph {
 
         let request: ChatRequest = ChatRequest::new(
             model_id,
-            vec![
-                Message::user_message(format!("Generate a one paragraph description for the following book:\n\n{}\n\n{}", highlevel_content,overview)),
-            ],
-        ).with_instructions(proj.config.ai_instruction.clone());
+            vec![Message::user_message(format!(
+                "Generate a one paragraph description for the following book:\n\n{}\n\n{}",
+                highlevel_content, overview
+            ))],
+        )
+        .with_instructions(proj.config.ai_instruction.clone());
 
         let (response, _is_from_cache) = proj.llm.make_request(&request)?;
 
@@ -53,15 +55,18 @@ impl StepAction for GenerateSummaryParagraph {
 
         let mut args = args;
         args.overview = Some(summary.clone());
-        std::fs::write("book_outline_with_summary.json", serde_json::to_string_pretty(&args)?)?;
+        std::fs::write(
+            "book_outline_with_summary.json",
+            serde_json::to_string_pretty(&args)?,
+        )?;
         std::fs::write("book_outline_with_summary.md", args.render_to_markdown())?;
-        Ok(
-            StepState { key: key.to_string(), inputs: vec![
-                StepFile::from_file("book_outline.json")?
-            ], outputs: vec![
+        Ok(StepState {
+            key: key.to_string(),
+            inputs: vec![StepFile::from_file("book_outline.json")?],
+            outputs: vec![
                 StepFile::from_file("book_outline_with_summary.json")?,
                 StepFile::from_file("book_outline_with_summary.md")?,
-            ] }
-        )
+            ],
+        })
     }
 }

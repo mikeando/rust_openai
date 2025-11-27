@@ -2,7 +2,6 @@
 use clap::{Parser, Subcommand};
 use std::fmt::Write as _;
 
-
 #[derive(Parser, Debug)]
 #[command(name = "booker", about = "Book authoring workflow tool")]
 struct Cli {
@@ -29,7 +28,7 @@ use rust_openai::{
     request::OpenAILLM,
     types::{ChatCompletionObject, JSONSchema, Tool},
 };
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, marker::PhantomData};
@@ -39,8 +38,8 @@ use std::env;
 
 mod steps;
 use steps::{
+    BookStatement, GenerateChapterOutlines, GenerateSummaryParagraph, ProjectInit,
     RebuildBookOutlineJson,
-    ProjectInit, BookStatement, GenerateSummaryParagraph, GenerateChapterOutlines
 };
 
 /// Configuration for the book authoring project
@@ -106,32 +105,36 @@ struct ReviewResult {
     // overall summary of strengths and weaknesses
     summary: String,
     // individual concrete review suggestions
-    suggestions: Vec<String>
+    suggestions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BookOutline {
     /// title of the book
     title: Option<String>,
-    
+
     /// subtitle of the book
     subtitle: Option<String>,
 
     /// high-level overview, in markdown format
     overview: Option<String>,
-    
+
     /// additional notes, each as a markdown paragraph.
     notes: Option<Vec<String>>,
 
     /// individual concrete review suggestions
     chapters: Option<Vec<ChapterOutline>>,
-} 
-
+}
 
 impl BookOutline {
     pub fn render_to_markdown(&self) -> String {
         let mut markdown = String::new();
-        write!(markdown, "# {}", self.title.as_deref().unwrap_or("Untitled book")).unwrap();
+        write!(
+            markdown,
+            "# {}",
+            self.title.as_deref().unwrap_or("Untitled book")
+        )
+        .unwrap();
         if let Some(subtitle) = &self.subtitle {
             write!(markdown, ": {}", subtitle).unwrap();
         }
@@ -199,15 +202,27 @@ impl ChapterOutline {
     }
 }
 
-pub fn get_tool_response<T: serde::de::DeserializeOwned>(chat_completion_object: ChatCompletionObject, tool_name: &str) -> anyhow::Result<T> {
-    let function_call_response = chat_completion_object.output.iter().find(|c| {
-        c.output_type.as_deref() == Some("function_call")
-            && c.name.as_deref() == Some(tool_name)
-    })
-    .with_context(|| format!("No function_call output found for tool: {}", tool_name))?;
+pub fn get_tool_response<T: serde::de::DeserializeOwned>(
+    chat_completion_object: ChatCompletionObject,
+    tool_name: &str,
+) -> anyhow::Result<T> {
+    let function_call_response = chat_completion_object
+        .output
+        .iter()
+        .find(|c| {
+            c.output_type.as_deref() == Some("function_call")
+                && c.name.as_deref() == Some(tool_name)
+        })
+        .with_context(|| format!("No function_call output found for tool: {}", tool_name))?;
 
-    let args =  function_call_response.arguments.as_ref().with_context(|| format!("No arguments found in function_call output for tool: {}", tool_name))?;
-    let args: T = serde_json::from_str(&args).with_context(|| format!("Failed to parse arguments for tool: {}", tool_name))?;
+    let args = function_call_response.arguments.as_ref().with_context(|| {
+        format!(
+            "No arguments found in function_call output for tool: {}",
+            tool_name
+        )
+    })?;
+    let args: T = serde_json::from_str(&args)
+        .with_context(|| format!("Failed to parse arguments for tool: {}", tool_name))?;
     Ok(args)
 }
 
@@ -217,10 +232,7 @@ pub struct TypedTool<T> {
 }
 
 impl<T: JsonSchema + serde::de::DeserializeOwned> TypedTool<T> {
-    pub fn create(
-        name: &str,
-        description: &str,
-    ) -> TypedTool<T> {
+    pub fn create(name: &str, description: &str) -> TypedTool<T> {
         let schema = JSONSchema(serde_json::to_value(schema_for!(T)).unwrap());
 
         let tool = Tool {
@@ -228,11 +240,14 @@ impl<T: JsonSchema + serde::de::DeserializeOwned> TypedTool<T> {
             name: name.to_string(),
             parameters: Some(schema),
         };
-        TypedTool { _t: PhantomData, tool }
+        TypedTool {
+            _t: PhantomData,
+            tool,
+        }
     }
 
     pub fn create_request(&self, request: ChatRequest) -> ModelToolRequest<T> {
-        ModelToolRequest::with_tool(request, self  )
+        ModelToolRequest::with_tool(request, self)
     }
 }
 
@@ -241,7 +256,7 @@ impl<T: JsonSchema + serde::de::DeserializeOwned> TypedTool<T> {
 pub fn create_book_outline_tool() -> TypedTool<BookOutline> {
     TypedTool::<BookOutline>::create(
         "submit_outline",
-        "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name."
+        "Submit the outline for a new book as a list of chapters. Note: Do not include chapter numbers in the chapter name.",
     )
 }
 
@@ -251,7 +266,7 @@ struct ModelToolRequest<T> {
     request: ChatRequest,
 }
 
-impl <T: JsonSchema + serde::de::DeserializeOwned> ModelToolRequest<T> {
+impl<T: JsonSchema + serde::de::DeserializeOwned> ModelToolRequest<T> {
     pub fn make_request(&self, llm: &mut OpenAILLM) -> anyhow::Result<T> {
         let (response, _is_from_cache) = llm.make_request(&self.request)?;
         let result: T = get_tool_response(response, &self.tool_name)?;
@@ -261,7 +276,11 @@ impl <T: JsonSchema + serde::de::DeserializeOwned> ModelToolRequest<T> {
     pub fn with_tool(request: ChatRequest, tool: &TypedTool<T>) -> ModelToolRequest<T> {
         let tools = vec![tool.tool.clone()];
         let request = request.with_tools(tools);
-        ModelToolRequest { _t: PhantomData::default(), request, tool_name: tool.tool.name.clone()}
+        ModelToolRequest {
+            _t: PhantomData::default(),
+            request,
+            tool_name: tool.tool.name.clone(),
+        }
     }
 }
 
@@ -273,9 +292,10 @@ pub struct StepFile {
 
 impl StepFile {
     fn from_file(filename: &str) -> anyhow::Result<StepFile> {
-        Ok(
-            StepFile { filename: filename.to_string(), hash: get_file_hash(filename)? }
-        )
+        Ok(StepFile {
+            filename: filename.to_string(),
+            hash: get_file_hash(filename)?,
+        })
     }
 }
 
@@ -287,7 +307,7 @@ pub struct ProjectData {
 pub trait StepAction {
     fn input_files(&self, key: &str) -> anyhow::Result<Vec<String>>;
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState>;
-    
+
     /// Default implementation based on input files and step state JSON.
     /// Override this method for steps that need custom lifecycle logic.
     fn get_lifecycle(&self, key: &str) -> anyhow::Result<StepLifecycle> {
@@ -297,7 +317,7 @@ pub trait StepAction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StepState {
-    key: String, 
+    key: String,
     inputs: Vec<StepFile>,
     outputs: Vec<StepFile>,
 }
@@ -308,16 +328,18 @@ pub struct Step {
     action: Box<dyn StepAction>,
 }
 impl Step {
-
     fn get_lifecycle(&self) -> anyhow::Result<StepLifecycle> {
         self.action.get_lifecycle(&self.key)
     }
 
-    pub fn get_lifecycle_by_files_and_state_json(input_files: &[String], key: &str) -> anyhow::Result<StepLifecycle> {
+    pub fn get_lifecycle_by_files_and_state_json(
+        input_files: &[String],
+        key: &str,
+    ) -> anyhow::Result<StepLifecycle> {
         let mut missing_files = vec![];
         let mut existing_files = HashMap::new();
         for file in input_files {
-            if ! std::path::Path::new(file).exists() {
+            if !std::path::Path::new(file).exists() {
                 missing_files.push(file.to_string());
             } else {
                 existing_files.insert(file, get_file_hash(file)?);
@@ -333,7 +355,6 @@ impl Step {
             (Some(_), false) => Ok(StepLifecycle::CompleteNotRunnable(missing_files)),
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -397,7 +418,6 @@ pub fn step(description: &str, key: &str, action: Box<dyn StepAction>) -> Step {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepLifecycle {
     NotRunnable(Vec<String>),
@@ -407,18 +427,27 @@ pub enum StepLifecycle {
 }
 
 pub fn is_file_entry_clean(s: &StepFile) -> bool {
-    get_file_hash(&s.filename).map(|hash| hash == s.hash ).unwrap_or(false)
+    get_file_hash(&s.filename)
+        .map(|hash| hash == s.hash)
+        .unwrap_or(false)
 }
 
-pub fn load_step_state_general<T: serde::de::DeserializeOwned>(key: &str) -> anyhow::Result<Option<T>> {
+pub fn load_step_state_general<T: serde::de::DeserializeOwned>(
+    key: &str,
+) -> anyhow::Result<Option<T>> {
     let step_state_file = format!(".booker/{}.stepstate.json", key);
-    if ! std::path::Path::new(&step_state_file).exists() {
-        return Ok(None)
+    if !std::path::Path::new(&step_state_file).exists() {
+        return Ok(None);
     }
-    Ok(serde_json::from_reader(std::fs::File::open(&step_state_file)?)?)
+    Ok(serde_json::from_reader(std::fs::File::open(
+        &step_state_file,
+    )?)?)
 }
 
-pub fn write_step_state_general<T: serde::ser::Serialize>(key: &str, step_state: &T) -> anyhow::Result<()> {
+pub fn write_step_state_general<T: serde::ser::Serialize>(
+    key: &str,
+    step_state: &T,
+) -> anyhow::Result<()> {
     let step_state_file = format!(".booker/{}.stepstate.json", key);
     serde_json::to_writer_pretty(std::fs::File::create(step_state_file)?, step_state)?;
     Ok(())
@@ -432,32 +461,42 @@ pub fn write_step_state(step_state: &StepState) -> anyhow::Result<()> {
     write_step_state_general(&step_state.key, step_state)
 }
 
-
-
 fn all_steps() -> Vec<Step> {
     vec![
         step("Initialize the project", "init", Box::new(ProjectInit)),
-        step("Initialize the book statement", "initialize", Box::new(BookStatement)),
+        step(
+            "Initialize the book statement",
+            "initialize",
+            Box::new(BookStatement),
+        ),
         step(
             "Rebuild book_outline JSON from markdown",
             "rebuild_outline_json",
             Box::new(RebuildBookOutlineJson::new(
                 "book_outline.md",
                 "book_outline.json",
-                "rebuild_outline_json_custom"
-            ))
+                "rebuild_outline_json_custom",
+            )),
         ),
-        step("Generate summary paragraph", "generate_summary", Box::new(GenerateSummaryParagraph {})),
+        step(
+            "Generate summary paragraph",
+            "generate_summary",
+            Box::new(GenerateSummaryParagraph {}),
+        ),
         step(
             "Rebuild book_outline_with_summary JSON from markdown",
             "rebuild_outline_json_2",
             Box::new(RebuildBookOutlineJson::new(
                 "book_outline_with_summary.md",
                 "book_outline_with_summary.json",
-                "rebuild_outline_json_2_custom"
-            ))
+                "rebuild_outline_json_2_custom",
+            )),
         ),
-        step("Generate chapter outlines", "generate_chapter_outlines", Box::new(GenerateChapterOutlines {})),
+        step(
+            "Generate chapter outlines",
+            "generate_chapter_outlines",
+            Box::new(GenerateChapterOutlines {}),
+        ),
     ]
 }
 
@@ -466,18 +505,10 @@ fn list_steps() -> anyhow::Result<()> {
     for step in &steps {
         let lifecycle = step.get_lifecycle()?;
         let (symbol, missing_files) = match lifecycle {
-            StepLifecycle::NotRunnable(items) => {
-                (".", items)
-            },
-            StepLifecycle::Runnable => {
-                (">", vec![])
-            },
-            StepLifecycle::CompleteRunnable => {
-                ("✓", vec![])
-            },
-            StepLifecycle::CompleteNotRunnable(items) => {
-                ("?", items)
-            }
+            StepLifecycle::NotRunnable(items) => (".", items),
+            StepLifecycle::Runnable => (">", vec![]),
+            StepLifecycle::CompleteRunnable => ("✓", vec![]),
+            StepLifecycle::CompleteNotRunnable(items) => ("?", items),
         };
         println!("{} {} : {}", symbol, step.key, step.description);
         for f in missing_files {
@@ -520,25 +551,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         None => {
             println!("No command provided.");
-        },
+        }
         Some(Commands::List) => {
             println!("Listing all step states:");
             list_steps()?;
-        },
+        }
         Some(Commands::Next) => {
             println!("Running next logical step");
             run_next_logical_step(&mut proj)?;
-        },
+        }
         Some(Commands::Run { step }) => {
             println!("Running step '{}'", step);
             let steps = all_steps();
-            let step = steps.iter().find(|s| s.key == step).with_context(|| format!("Step '{}' not found", step))?;
+            let step = steps
+                .iter()
+                .find(|s| s.key == step)
+                .with_context(|| format!("Step '{}' not found", step))?;
             run_step_action(step, &mut proj)?;
-        },
+        }
     }
 
     return Ok(());
-
 
     // //
     // // Our next job is to crcitique the book summary in a variety of ways.
@@ -546,11 +579,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // //
     // // These axes were generated by asking chatGPT the following:
     // //
-    // // > You are going to be given a document containing a book summary with a detailed 
-    // // > chapter/section break down for that book. It is a non-fiction book on world building 
-    // // > for experienced authors. Your role is to assist the author to improve the final result 
-    // // > of his writing process. Consider several different axes on which you could critique the 
-    // // > summary document. Note: You will not have access to the final text, just the overall 
+    // // > You are going to be given a document containing a book summary with a detailed
+    // // > chapter/section break down for that book. It is a non-fiction book on world building
+    // // > for experienced authors. Your role is to assist the author to improve the final result
+    // // > of his writing process. Consider several different axes on which you could critique the
+    // // > summary document. Note: You will not have access to the final text, just the overall
     // // > detailed structure of the document and the section/chapter names.
     // //
     // // We could do this iteratively too.
@@ -586,7 +619,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     // Build the prompt - We structure it a little oddly, with content then task for two reasons.
     //     // 1. LLMs can sometimes forget commands given at the start
     //     // 2. The command will change each iteration, by putting unchanging content at the start
-    //     //    we allow prompt-caching to cut in, which for openAI reduces input token costs by a factor 
+    //     //    we allow prompt-caching to cut in, which for openAI reduces input token costs by a factor
     //     //    of 10 for the cached tokens.
 
     //     let mut prompt = String::new();
@@ -614,7 +647,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     println!("*** review\n{:#?}", review);
 
     //     review_entries.push(review);
-    // } 
+    // }
 
     // // Write all the reviews to a file for later analysis
     // let mut review_markdown = String::new();
@@ -671,7 +704,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     review
     // };
 
-    /* 
+    /*
     // Now we want to rank these and select the top 5 fixes.
     // We want to focus on high-impact and high-level suggestions.
     let mut prompt = String::new();
@@ -743,8 +776,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let revised_outline: RevisedOutline = request.make_request(&mut llm)?;
             println!("*** revised outline\n{:#?}", revised_outline);
-            // Rebuild the markdown from the revised outline        
-            todo!("Rebuild the markdown from the revised outline");    
+            // Rebuild the markdown from the revised outline
+            todo!("Rebuild the markdown from the revised outline");
 
             println!("=== Revised Outline after applying suggestion:\n{}", markdown);
         }
