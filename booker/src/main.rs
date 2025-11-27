@@ -41,6 +41,39 @@ use std::env;
 mod steps;
 use steps::{RebuildBookOutlineJson, RebuildBookOutlineState};
 
+/// Configuration for the book authoring project
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    /// AI system instruction for the book authoring assistant
+    pub ai_instruction: String,
+}
+
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        Self {
+            ai_instruction: "You are an expert book authoring AI.".to_string(),
+        }
+    }
+}
+
+impl ProjectConfig {
+    pub fn load() -> anyhow::Result<Self> {
+        let config_path = ".booker/config.json";
+        if !std::path::Path::new(config_path).exists() {
+            return Ok(Self::default());
+        }
+        let config: ProjectConfig = serde_json::from_reader(std::fs::File::open(config_path)?)?;
+        Ok(config)
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        std::fs::create_dir_all(".booker")?;
+        let config_path = ".booker/config.json";
+        serde_json::to_writer_pretty(std::fs::File::create(config_path)?, self)?;
+        Ok(())
+    }
+}
+
 /// Breakdown of a chapter into sections with overview, key points and notes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 struct ChapterOutline {
@@ -237,6 +270,7 @@ impl StepFile {
 
 pub struct ProjectData {
     llm: OpenAILLM,
+    pub config: ProjectConfig,
 }
 
 pub trait StepAction {
@@ -391,16 +425,26 @@ impl StepAction for ProjectInit {
         Ok(vec![])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, _key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+        // Create the config file
+        let config = ProjectConfig::default();
+        config.save()?;
+        
+        // Create the book highlevel file
         let p = "book_highlevel.txt";
         let mut f = std::fs::OpenOptions::new().create(true).write(true).open(p)?;
         writeln!(f,"Subject matter: World building for fantasy and science fiction novels.")?;
         writeln!(f)?;
         writeln!(f, "Target Audience: Professional and experienced authors looking to improve their world building skills.")?;
         drop(f);
+        
+        // Update proj config
+        proj.config = config;
+        
         Ok(
             StepState { key: "init".to_string(), inputs: vec![], outputs: vec![
-                StepFile::from_file(p)?
+                StepFile::from_file(p)?,
+                StepFile::from_file(".booker/config.json")?
             ] }
         )
     }
@@ -442,7 +486,7 @@ impl StepAction for BookStatement {
             vec![
                 Message::user_message(prompt),
             ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string())
+        ).with_instructions(proj.config.ai_instruction.clone())
         );
 
         let args = request.make_request(&mut proj.llm)?;
@@ -505,7 +549,7 @@ impl StepAction for GenerateSummaryParagraph {
             vec![
                 Message::user_message(format!("Generate a one paragraph description for the following book:\n\n{}\n\n{}", highlevel_content,overview)),
             ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string());
+        ).with_instructions(proj.config.ai_instruction.clone());
 
         let (response, _is_from_cache) = proj.llm.make_request(&request)?;
 
@@ -545,7 +589,7 @@ impl StepAction for GenerateSummaryParagraph {
 struct GenerateChapterOutlines;
 
 impl GenerateChapterOutlines {
-    fn generate_chapter_outline(&self, llm: &mut OpenAILLM, args: &BookOutline, chapter_index: usize) -> anyhow::Result<ChapterOutline> {
+    fn generate_chapter_outline(&self, proj: &mut ProjectData, args: &BookOutline, chapter_index: usize) -> anyhow::Result<ChapterOutline> {
         let model_id = ModelId::Gpt5Mini;
 
         println!("=== processing chapter {}", chapter_index);
@@ -563,10 +607,10 @@ impl GenerateChapterOutlines {
             vec![
                 Message::user_message(format!("Create and submit a list of potential sections to be included in chapter {}, based on the following book overview:\n\n{}", chapter_index, overview)),
             ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string());
+        ).with_instructions(proj.config.ai_instruction.clone());
         let request = chapter_outline_tool.create_request(request);
 
-        let breakdown = request.make_request(llm)?;    
+        let breakdown = request.make_request(&mut proj.llm)?;    
         Ok(breakdown)
     }
 }
@@ -593,7 +637,7 @@ impl StepAction for GenerateChapterOutlines {
         let mut chapter_breakdowns = Vec::new();
         let chapters = args.chapters.clone().unwrap();
         for chapter_index in 1..=chapters.len() {
-            chapter_breakdowns.push(self.generate_chapter_outline(&mut proj.llm, &args, chapter_index)?);
+            chapter_breakdowns.push(self.generate_chapter_outline(proj, &args, chapter_index)?);
         }
         args.chapters = Some(chapter_breakdowns);
 
@@ -694,9 +738,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     let llm = OpenAILLM::with_defaults(&openai_api_key)?;
+    let config = ProjectConfig::load()?;
 
-
-    let mut proj = ProjectData{llm};
+    let mut proj = ProjectData { llm, config };
     match cli.command {
         None => {
             println!("No command provided.");

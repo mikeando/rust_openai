@@ -60,7 +60,7 @@ impl StepAction for RebuildBookOutlineJson {
             vec![
                 Message::user_message(prompt),
             ],
-        ).with_instructions("You are a an expert book authoring AI.".to_string())
+        ).with_instructions(proj.config.ai_instruction.clone())
         );
 
         let args = request.make_request(&mut proj.llm)?;
