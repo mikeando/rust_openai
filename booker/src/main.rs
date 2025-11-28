@@ -1,6 +1,5 @@
 // --- CLI argument parsing (clap) ---
 use clap::{Parser, Subcommand};
-use std::fmt::Write as _;
 
 #[derive(Parser, Debug)]
 #[command(name = "booker", about = "Book authoring workflow tool")]
@@ -35,6 +34,9 @@ use std::{collections::HashMap, marker::PhantomData};
 
 use rust_openai::types::ChatRequest;
 use std::env;
+
+mod types;
+pub use types::{BookOutline, ChapterOutline, ReviewResult, SectionOutline};
 
 mod steps;
 use steps::{
@@ -72,133 +74,6 @@ impl ProjectConfig {
         let config_path = ".booker/config.json";
         serde_json::to_writer_pretty(std::fs::File::create(config_path)?, self)?;
         Ok(())
-    }
-}
-
-/// Breakdown of a chapter into sections with overview, key points and notes
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct ChapterOutline {
-    /// chapter title, not including number.
-    title: String,
-    /// chapter subtitle
-    subtitle: String,
-    /// chapter overview
-    overview: Option<String>,
-    /// sections in the chapter
-    sections: Option<Vec<SectionOutline>>,
-    /// notes for the chapter
-    notes: Option<Vec<String>>,
-}
-
-/// Outline for a single section of a book within a chapter
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct SectionOutline {
-    /// section title
-    title: String,
-    /// key points in the section
-    key_points: Vec<String>,
-}
-
-/// Response from a review submission
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-struct ReviewResult {
-    // overall summary of strengths and weaknesses
-    summary: String,
-    // individual concrete review suggestions
-    suggestions: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct BookOutline {
-    /// title of the book
-    title: Option<String>,
-
-    /// subtitle of the book
-    subtitle: Option<String>,
-
-    /// high-level overview, in markdown format
-    overview: Option<String>,
-
-    /// additional notes, each as a markdown paragraph.
-    notes: Option<Vec<String>>,
-
-    /// individual concrete review suggestions
-    chapters: Option<Vec<ChapterOutline>>,
-}
-
-impl BookOutline {
-    pub fn render_to_markdown(&self) -> String {
-        let mut markdown = String::new();
-        write!(
-            markdown,
-            "# {}",
-            self.title.as_deref().unwrap_or("Untitled book")
-        )
-        .unwrap();
-        if let Some(subtitle) = &self.subtitle {
-            write!(markdown, ": {}", subtitle).unwrap();
-        }
-        writeln!(markdown, "\n").unwrap();
-        if let Some(overview) = &self.overview {
-            markdown.push_str("## Overview\n\n");
-            markdown.push_str(overview);
-            markdown.push_str("\n\n");
-        }
-
-        if let Some(notes) = &self.notes {
-            if notes.len() > 0 {
-                markdown.push_str("## Additional Notes\n\n");
-                for note in notes {
-                    markdown.push_str(&format!("{}\n\n", note));
-                }
-            }
-        }
-
-        if let Some(chapters) = &self.chapters {
-            for (i, chapter) in chapters.iter().enumerate() {
-                let chapter_markdown = chapter.render_to_markdown(i);
-                markdown.push_str(&chapter_markdown);
-            }
-        }
-        markdown
-    }
-}
-
-impl ChapterOutline {
-    pub fn render_to_markdown(&self, chapter_index: usize) -> String {
-        let mut markdown = String::new();
-        markdown.push_str(&format!(
-            "## Chapter {}: {} - {}\n\n",
-            chapter_index + 1,
-            self.title,
-            self.subtitle
-        ));
-        if let Some(overview) = &self.overview {
-            markdown.push_str("### Overview\n\n");
-            markdown.push_str(overview);
-            markdown.push_str("\n\n");
-        }
-        if let Some(sections) = &self.sections {
-            if sections.len() > 0 {
-                markdown.push_str("### Sections\n\n");
-                for section in sections {
-                    markdown.push_str(&format!("#### {}\n", section.title));
-                    for point in &section.key_points {
-                        markdown.push_str(&format!("- {}\n", point));
-                    }
-                    markdown.push_str("\n");
-                }
-            }
-        }
-        if let Some(notes) = &self.notes {
-            if notes.len() > 0 {
-                markdown.push_str("### Notes\n\n");
-                for note in notes {
-                    markdown.push_str(&format!("{}\n\n", note));
-                }
-            }
-        }
-        markdown
     }
 }
 
