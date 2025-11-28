@@ -40,7 +40,7 @@ pub use types::{BookOutline, ChapterOutline, ReviewResult, SectionOutline};
 
 mod steps;
 use steps::{
-    BookStatement, GenerateChapterOutlines, GenerateSummaryParagraph, ProjectInit,
+    BookStatement, DesignSpine, GenerateChapterOutlines, GenerateSummaryParagraph, ProjectInit,
     RebuildBookOutlineJson,
 };
 
@@ -365,6 +365,20 @@ fn all_steps() -> Vec<Step> {
                 "book_outline_with_summary.md",
                 "book_outline_with_summary.json",
                 "rebuild_outline_json_2_custom",
+            )),
+        ),
+        step(
+            "Generate design spine statement",
+            "design_spine",
+            Box::new(DesignSpine),
+        ),
+        step(
+            "Rebuild book_outline_with_spine JSON from markdown",
+            "rebuild_outline_json_3",
+            Box::new(RebuildBookOutlineJson::new(
+                "book_outline_with_spine.md",
+                "book_outline_with_spine.json",
+                "rebuild_outline_json_3_custom",
             )),
         ),
         step(

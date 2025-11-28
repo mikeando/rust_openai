@@ -84,6 +84,9 @@ pub struct BookOutline {
     /// high-level overview, in markdown format
     pub overview: Option<String>,
 
+    /// design spine statement - 1-2 sentences capturing the core thesis of the book
+    pub design_spine: Option<String>,
+
     /// additional notes, each as a markdown paragraph.
     pub notes: Option<Vec<String>>,
 
@@ -107,6 +110,12 @@ impl BookOutline {
         if let Some(overview) = &self.overview {
             markdown.push_str("## Overview\n\n");
             markdown.push_str(overview);
+            markdown.push_str("\n\n");
+        }
+
+        if let Some(design_spine) = &self.design_spine {
+            markdown.push_str("## Design Spine\n\n");
+            markdown.push_str(design_spine);
             markdown.push_str("\n\n");
         }
 

@@ -71,13 +71,13 @@ impl GenerateChapterOutlines {
 
 impl StepAction for GenerateChapterOutlines {
     fn input_files(&self, _key: &str) -> anyhow::Result<Vec<String>> {
-        Ok(vec!["book_outline_with_summary.json".to_string()])
+        Ok(vec!["book_outline_with_spine.json".to_string()])
     }
 
     fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
         // let model_id = ModelId::Gpt5Mini;
         // Load the outline from file
-        let outline_content = std::fs::read("book_outline_with_summary.json")?;
+        let outline_content = std::fs::read("book_outline_with_spine.json")?;
         let mut args: BookOutline = serde_json::from_slice(&outline_content)?;
 
         // Break down the chapters
@@ -96,7 +96,7 @@ impl StepAction for GenerateChapterOutlines {
         std::fs::write("book_output_with_chapters.md", &args.render_to_markdown())?;
         Ok(StepState {
             key: key.to_string(),
-            inputs: vec![StepFile::from_file("book_outline_with_summary.json")?],
+            inputs: vec![StepFile::from_file("book_outline_with_spine.json")?],
             outputs: vec![
                 StepFile::from_file("book_output_with_chapters.json")?,
                 StepFile::from_file("book_output_with_chapters.md")?,
