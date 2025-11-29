@@ -19,7 +19,7 @@ impl StepAction for ProjectInit {
         Ok(vec![])
     }
 
-    fn execute(&self, _key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, _key: &str, _proj: &ProjectData) -> anyhow::Result<StepState> {
         // Create the config file
         let config = ProjectConfig::default();
         config.save()?;
@@ -42,7 +42,7 @@ impl StepAction for ProjectInit {
         drop(f);
 
         // Update proj config
-        proj.config = config;
+        // proj.config = config; // This is a problem with immutable proj
 
         Ok(StepState {
             key: "init".to_string(),

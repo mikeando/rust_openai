@@ -40,7 +40,7 @@ impl StepAction for DesignSpine {
         Ok(vec!["book_outline_with_summary.json".to_string()])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, key: &str, proj: &ProjectData) -> anyhow::Result<StepState> {
         let model_id = ModelId::Gpt5Mini;
 
         // Load the outline with summary
@@ -80,7 +80,7 @@ Submit your design spine statement using the provided function."#,
                 .with_instructions(proj.config.ai_instruction.clone()),
         );
 
-        let response: DesignSpineResponse = request.make_request(&mut proj.llm)?;
+        let response: DesignSpineResponse = request.make_request(&proj.llm)?;
         
         println!("Generated design spine: {}", response.design_spine);
 

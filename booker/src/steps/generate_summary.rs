@@ -34,7 +34,7 @@ impl StepAction for GenerateSummaryParagraph {
         ])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, key: &str, proj: &ProjectData) -> anyhow::Result<StepState> {
         let model_id = ModelId::Gpt5Mini;
 
         // Load the outline from file
