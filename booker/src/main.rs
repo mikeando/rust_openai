@@ -453,15 +453,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             list_steps()?;
         }
         Some(Commands::Run { step }) => {
+            // TODO: We could have a more complex scheduler that takes a list of steps,
+            // works out which are runnable and runs them, and iteratively checks for
+            // more runnable tasks until everything is done.
             let all_steps = all_steps()?;
             if step == "chapter_outline_all" {
-                let chapter_steps: Vec<_> = all_steps
-                    .iter()
+                let mut chapter_steps: Vec<_> = all_steps
+                    .into_iter()
                     .filter(|s| s.key.starts_with("generate_chapter_"))
                     .collect();
-                chapter_steps
-                    .par_iter()
-                    .try_for_each(|step| run_step_action(step, &proj))?;
+
+                // To improve token caching, we run the first chapter by itself, then the rest in parallel.
+                // This is a bit of a hack, but it's a good trade-off for now.
+                if let Some(first_chapter) = chapter_steps.drain(0..1).next() {
+                    run_step_action(&first_chapter, &proj)?;
+                }
+
+                let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
+                pool.install(|| {
+                    chapter_steps
+                        .par_iter()
+                        .try_for_each(|step| run_step_action(step, &proj))
+                })?;
+
             } else {
                 let step_to_run = all_steps
                     .iter()

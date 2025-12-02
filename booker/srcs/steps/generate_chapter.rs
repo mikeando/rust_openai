@@ -25,7 +25,7 @@ impl GenerateChapter {
         let request: ChatRequest = ChatRequest::new(
             model_id,
             vec![
-                Message::user_message(format!("Based on the following book overview, create and submit a list of potential sections to be included in chapter {}:\n\n{}", self.chapter_index, overview)),
+                Message::user_message(format!("Consider the following book overview:\n\n{}\n\nCreate and submit a list of potential sections to be included in chapter {}.", overview, self.chapter_index)),
             ],
         ).with_instructions(proj.config.ai_instruction.clone());
         let request = chapter_outline_tool.create_request(request);
