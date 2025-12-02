@@ -17,8 +17,7 @@ enum Commands {
     /// Run an action (prep or run) on a step
     Run {
         /// Step key (e.g. "initialize", "generate_outline")
-        #[clap(required = true)]
-        steps: Vec<String>,
+        step: String,
     },
 }
 use anyhow::Context;
@@ -453,25 +452,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Listing all step states:");
             list_steps()?;
         }
-        Some(Commands::Run { steps }) => {
+        Some(Commands::Run { step }) => {
             let all_steps = all_steps()?;
-            let steps_to_run: Vec<_> = all_steps
-                .into_iter()
-                .filter(|s| steps.contains(&s.key))
-                .collect();
-
-            let parallel = steps_to_run
-                .iter()
-                .all(|s| s.key.starts_with("generate_chapter_"));
-
-            if parallel {
-                steps_to_run.par_iter().try_for_each(|step| {
-                    run_step_action(step, &proj)
-                })?;
+            if step == "chapter_outline_all" {
+                let chapter_steps: Vec<_> = all_steps
+                    .iter()
+                    .filter(|s| s.key.starts_with("generate_chapter_"))
+                    .collect();
+                chapter_steps
+                    .par_iter()
+                    .try_for_each(|step| run_step_action(step, &proj))?;
             } else {
-                for step in steps_to_run {
-                    run_step_action(&step, &proj)?;
-                }
+                let step_to_run = all_steps
+                    .iter()
+                    .find(|s| s.key == step)
+                    .with_context(|| format!("Step '{}' not found", step))?;
+                run_step_action(step_to_run, &proj)?;
             }
         }
     }

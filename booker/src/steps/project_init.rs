@@ -41,9 +41,6 @@ impl StepAction for ProjectInit {
         )?;
         drop(f);
 
-        // Update proj config
-        // proj.config = config; // This is a problem with immutable proj
-
         Ok(StepState {
             key: "init".to_string(),
             inputs: vec![],
