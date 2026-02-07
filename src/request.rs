@@ -109,12 +109,7 @@ impl DefaultRequestCache {
         fs: Arc<Mutex<dyn Xfs + Send>>,
         root: PathBuf,
     ) -> anyhow::Result<DefaultRequestCache> {
-        let is_dir = fs
-            .lock()
-            .unwrap()
-            .metadata(&root)
-            .map(|m| m.is_dir())
-            .unwrap_or(false);
+        let is_dir = fs.lock().unwrap().is_dir(&root);
         if !is_dir {
             bail!(
                 "DefaultRrequestCache::new failed - '{}' is not a directory",
