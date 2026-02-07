@@ -1,10 +1,11 @@
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use anyhow::{anyhow, bail};
 use data_encoding::HEXLOWER;
+use inscenerator_xfs::{OsFs, Xfs};
 use ring::digest;
 use serde_json::json;
 
@@ -23,7 +24,7 @@ impl OpenAILLM {
         let openai_api_key = openai_api_key.to_string();
         let requester = OpenAIRawRequester { openai_api_key };
         let requester = Arc::new(Mutex::new(requester));
-        let fs = DefaultFS {};
+        let fs = OsFs {};
         let fs = Arc::new(Mutex::new(fs));
         let cache = DefaultRequestCache::new(fs, PathBuf::from("cache"))?;
         let cache = Arc::new(Mutex::new(cache));
@@ -98,68 +99,23 @@ pub trait RequestCache {
     ) -> anyhow::Result<()>;
 }
 
-#[derive(Debug, PartialEq)]
-pub enum TrivialFSPathType {
-    NoSuchPath,
-    File,
-    Directory,
-}
-
-pub trait TrivialFS {
-    fn read_to_string(&self, p: &Path) -> anyhow::Result<String>;
-    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()>;
-    fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType>;
-}
-
-pub struct DefaultFS {}
-
-impl TrivialFS for DefaultFS {
-    fn read_to_string(&self, p: &Path) -> anyhow::Result<String> {
-        Ok(std::fs::read_to_string(p)?)
-    }
-    fn write(&self, p: &Path, value: &str) -> anyhow::Result<()> {
-        std::fs::write(p, value)?;
-        Ok(())
-    }
-    fn path_type(&self, p: &Path) -> anyhow::Result<TrivialFSPathType> {
-        use std::io::ErrorKind;
-
-        let r = std::fs::metadata(p);
-        match r {
-            Ok(metadata) => {
-                if metadata.is_file() {
-                    Ok(TrivialFSPathType::File)
-                } else if metadata.is_dir() {
-                    Ok(TrivialFSPathType::Directory)
-                } else {
-                    Err(anyhow!(
-                        "path_type failed: '{}' is an invalid path type",
-                        p.display()
-                    ))
-                }
-            }
-            Err(e) if e.kind() == ErrorKind::NotFound => Ok(TrivialFSPathType::NoSuchPath),
-            Err(e) => Err(anyhow!(
-                "path_type failed when stating {}:  {}",
-                p.display(),
-                e
-            )),
-        }
-    }
-}
-
 pub struct DefaultRequestCache {
-    fs: Arc<Mutex<dyn TrivialFS + Send>>,
+    fs: Arc<Mutex<dyn Xfs + Send>>,
     root: PathBuf,
 }
 
 impl DefaultRequestCache {
     pub fn new(
-        fs: Arc<Mutex<dyn TrivialFS + Send>>,
+        fs: Arc<Mutex<dyn Xfs + Send>>,
         root: PathBuf,
     ) -> anyhow::Result<DefaultRequestCache> {
-        let r = fs.lock().unwrap().path_type(&root)?;
-        if r != TrivialFSPathType::Directory {
+        let is_dir = fs
+            .lock()
+            .unwrap()
+            .metadata(&root)
+            .map(|m| m.is_dir())
+            .unwrap_or(false);
+        if !is_dir {
             bail!(
                 "DefaultRrequestCache::new failed - '{}' is not a directory",
                 root.display()
@@ -190,8 +146,9 @@ impl RequestCache for DefaultRequestCache {
         let key = self.key(request);
         let cache_file_path = self.key_to_path(&key);
 
-        if let Ok(content) = self.fs.lock().unwrap().read_to_string(&cache_file_path) {
-            let value: serde_json::Value = serde_json::from_str(&content)?;
+        let fs = self.fs.lock().unwrap();
+        if let Ok(reader) = fs.reader(&cache_file_path) {
+            let value: serde_json::Value = serde_json::from_reader(reader)?;
             let cached_request = ChatRequest::from_json(&value["request"])
                 .map_err(|_e| anyhow!("unable to decode request"))?;
             let cached_response = ChatCompletionObject::from_json(&value["response"])
@@ -218,10 +175,11 @@ impl RequestCache for DefaultRequestCache {
             "response": response.to_json(),
         });
 
-        self.fs.lock().unwrap().write(
-            &cache_file_path,
-            &serde_json::to_string_pretty(&cache_entry).unwrap(),
-        )?;
+        let mut fs = self.fs.lock().unwrap();
+        let writer = fs
+            .writer(&cache_file_path)
+            .map_err(|e| anyhow!("Cache write failed: {}", e))?;
+        serde_json::to_writer_pretty(writer, &cache_entry)?;
 
         Ok(())
     }
@@ -248,5 +206,40 @@ impl OpenAILLM {
             .cache_response(request, &response)?;
 
         Ok((response, false))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generate::{Generatable, GeneratorContext};
+    use crate::types::{Message, ModelId};
+    use inscenerator_xfs::mockfs::MockFS;
+    use std::path::Path;
+
+    #[test]
+    fn test_cache_roundtrip() -> anyhow::Result<()> {
+        let mut fs = MockFS::new();
+        let root = Path::new("/cache");
+        fs.create_dir_all(root)?;
+
+        let fs = Arc::new(Mutex::new(fs));
+        let mut cache = DefaultRequestCache::new(fs, root.to_path_buf())?;
+
+        let request = ChatRequest::new(ModelId::Gpt5, vec![Message::user_message("hello")]);
+
+        let mut context = GeneratorContext::new();
+        let mut response = ChatCompletionObject::gen(&mut context);
+        response.id = "test".to_string();
+
+        // Cache it
+        cache.cache_response(&request, &response)?;
+
+        // Retrieve it
+        let cached_response = cache.get_response_if_cached(&request)?;
+        assert!(cached_response.is_some());
+        assert_eq!(cached_response.unwrap().id, "test");
+
+        Ok(())
     }
 }
