@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap();
     eprintln!("{:?}", openai_api_key);
-    let mut llm = OpenAILLM::with_defaults(&openai_api_key)?;
+    let llm = OpenAILLM::with_defaults(&openai_api_key)?;
 
     let request: ChatRequest =
         ChatRequest::new(ModelId::Gpt5Mini, vec![Message::user_message("Hello!")])
