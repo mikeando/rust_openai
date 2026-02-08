@@ -12,7 +12,7 @@ To use this client, add the following to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-rust_openai = { git = "https://github.com/example/rust_openai.git" }
+rust_openai = { git = "https://github.com/mikeando/rust_openai.git" }
 ```
 
 ## Usage
