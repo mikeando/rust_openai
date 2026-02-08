@@ -11,6 +11,7 @@ pub enum ModelId {
     Gpt5Mini,
     Gpt5Mini20250807,
     Gpt5Nano,
+    Gpt5Nano20250807,
     Gpt5Pro,
 }
 
@@ -21,6 +22,7 @@ impl ModelId {
             ModelId::Gpt5Mini => String::from("gpt-5-mini"),
             ModelId::Gpt5Mini20250807 => String::from("gpt-5-mini-2025-08-07"),
             ModelId::Gpt5Nano => String::from("gpt-5-nano"),
+            ModelId::Gpt5Nano20250807 => String::from("gpt-5-nano-2025-08-07"),
             ModelId::Gpt5Pro => String::from("gpt-5-pro"),
         }
     }
@@ -31,6 +33,7 @@ impl ModelId {
             ModelId::Gpt5Mini,
             ModelId::Gpt5Mini20250807,
             ModelId::Gpt5Nano,
+            ModelId::Gpt5Nano20250807,
             ModelId::Gpt5Pro,
         ]
     }
@@ -41,6 +44,7 @@ impl ModelId {
             "gpt-5-mini" => Ok(ModelId::Gpt5Mini),
             "gpt-5-mini-2025-08-07" => Ok(ModelId::Gpt5Mini20250807),
             "gpt-5-nano" => Ok(ModelId::Gpt5Nano),
+            "gpt-5-nano-2025-08-07" => Ok(ModelId::Gpt5Nano20250807),
             "gpt-5-pro" => Ok(ModelId::Gpt5Pro),
             _ => Err(Error::InvalidModelName),
         }
