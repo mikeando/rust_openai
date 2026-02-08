@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let llm = OpenAILLM::with_defaults(&openai_api_key)?;
 
     let request: ChatRequest =
-        ChatRequest::new(ModelId::Gpt5Mini, vec![Message::user_message("Hello!")])
+        ChatRequest::new(ModelId::Gpt5Mini(None), vec![Message::user_message("Hello!")])
             .with_instructions("You are a helpful assistant.".to_string());
 
     let (response, is_from_cache) = llm.make_request(&request)?;

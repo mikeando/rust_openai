@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest =
-            ChatRequest::new(ModelId::Gpt5, vec![Message::user_message("Hello!")])
+            ChatRequest::new(ModelId::Gpt5(None), vec![Message::user_message("Hello!")])
                 .with_instructions("You are a helpful assistant.".to_string());
 
         let expected = r#"
@@ -56,7 +56,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt5,
+            ModelId::Gpt5(None),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
