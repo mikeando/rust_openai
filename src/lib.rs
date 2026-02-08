@@ -96,7 +96,7 @@ mod tests {
                                 }
                             }
                         ],
-                        "tool_choice": "auto"
+                        "tool_choice": "required"
                     }
                 "#;
 

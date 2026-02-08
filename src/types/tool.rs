@@ -19,6 +19,7 @@ impl ToJson for Tool {
         let mut v = serde_json::Map::new();
         v.insert("type".to_string(), json!("function"));
         v.insert("name".to_string(), json!(self.name.clone()));
+        // v.insert("strict".to_string(), json!(true));
         if let Some(description) = &self.description {
             v.insert("description".to_string(), json!(description));
         }
