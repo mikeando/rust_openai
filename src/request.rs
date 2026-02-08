@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub struct OpenAILLM {
-    requester: Arc<Mutex<dyn RawRequester + Send>>,
+    requester: Arc<dyn RawRequester + Send + Sync>,
     cache: Arc<Mutex<dyn RequestCache + Send>>,
 }
 
@@ -22,7 +22,7 @@ impl OpenAILLM {
     pub fn with_defaults(openai_api_key: &str) -> anyhow::Result<OpenAILLM> {
         let openai_api_key = openai_api_key.to_string();
         let requester = OpenAIRawRequester { openai_api_key };
-        let requester = Arc::new(Mutex::new(requester));
+        let requester = Arc::new(requester);
         let fs = DefaultFS {};
         let fs = Arc::new(Mutex::new(fs));
         let cache = DefaultRequestCache::new(fs, PathBuf::from("cache"))?;
@@ -31,7 +31,7 @@ impl OpenAILLM {
     }
 
     pub fn new(
-        requester: Arc<Mutex<dyn RawRequester + Send>>,
+        requester: Arc<dyn RawRequester + Send + Sync>,
         cache: Arc<Mutex<dyn RequestCache + Send>>,
     ) -> OpenAILLM {
         OpenAILLM { requester, cache }
@@ -40,7 +40,7 @@ impl OpenAILLM {
 
 pub trait RawRequester {
     fn make_uncached_request(
-        &mut self,
+        &self,
         request: &ChatRequest,
     ) -> anyhow::Result<ChatCompletionObject>;
 }
@@ -51,7 +51,7 @@ pub struct OpenAIRawRequester {
 
 impl RawRequester for OpenAIRawRequester {
     fn make_uncached_request(
-        &mut self,
+        &self,
         request: &ChatRequest,
     ) -> anyhow::Result<ChatCompletionObject> {
         let response = ureq::post("https://api.openai.com/v1/responses")
@@ -92,7 +92,7 @@ pub trait RequestCache {
         request: &ChatRequest,
     ) -> anyhow::Result<Option<ChatCompletionObject>>;
     fn cache_response(
-        &mut self,
+        &self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
     ) -> anyhow::Result<()>;
@@ -206,7 +206,7 @@ impl RequestCache for DefaultRequestCache {
     }
 
     fn cache_response(
-        &mut self,
+        &self,
         request: &ChatRequest,
         response: &ChatCompletionObject,
     ) -> anyhow::Result<()> {
@@ -229,7 +229,7 @@ impl RequestCache for DefaultRequestCache {
 
 impl OpenAILLM {
     pub fn make_request(
-        &mut self,
+        &self,
         request: &ChatRequest,
     ) -> anyhow::Result<(ChatCompletionObject, bool)> {
         if let Some(v) = self.cache.lock().unwrap().get_response_if_cached(request)? {
@@ -238,8 +238,6 @@ impl OpenAILLM {
 
         let response = self
             .requester
-            .lock()
-            .unwrap()
             .make_uncached_request(request)?;
 
         self.cache
