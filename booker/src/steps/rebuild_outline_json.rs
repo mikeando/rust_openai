@@ -3,8 +3,8 @@ use rust_openai::types::{ChatRequest, Message, ModelId};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ProjectData, StepAction, StepFile, StepLifecycle, StepState, create_book_outline_tool,
-    get_file_hash, load_step_state_general, try_get_file_hash, write_step_state_general,
+    create_book_outline_tool, get_file_hash, load_step_state_general, try_get_file_hash,
+    write_step_state_general, ProjectData, StepAction, StepFile, StepLifecycle, StepState,
 };
 
 /// State tracking for markdown-to-JSON rebuild operations.
@@ -74,7 +74,7 @@ impl StepAction for RebuildBookOutlineJson {
         Ok(vec![self.input_md.clone()])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, key: &str, proj: &ProjectData) -> anyhow::Result<StepState> {
         let model_id = ModelId::Gpt5Nano;
         let outline_tool = create_book_outline_tool();
         let content = std::fs::read(&self.input_md)?;
@@ -89,14 +89,15 @@ impl StepAction for RebuildBookOutlineJson {
             "---",
             "",
             "NOTE: Not all fields of the outline need to be filled in yet - only those actually present in the markdown.",
-        ].join("\n");
+        ]
+        .join("\n");
 
         let request = outline_tool.create_request(
             ChatRequest::new(model_id, vec![Message::user_message(prompt)])
                 .with_instructions(proj.config.ai_instruction.clone()),
         );
 
-        let args = request.make_request(&mut proj.llm)?;
+        let args = request.make_request(&proj.llm)?;
         std::fs::write(&self.output_json, serde_json::to_string_pretty(&args)?)?;
         let rebuild_state = RebuildBookOutlineState {
             input_markdown_hash: get_file_hash(&self.input_md)?,
@@ -122,7 +123,8 @@ impl StepAction for RebuildBookOutlineJson {
         let json_hash = try_get_file_hash(&self.output_json)?;
 
         // Load the step metadata
-        let step_state: Option<RebuildBookOutlineState> = load_step_state_general(&self.state_key)?;
+        let step_state: Option<RebuildBookOutlineState> =
+            load_step_state_general(&self.state_key)?;
 
         match (step_state, markdown_hash, json_hash) {
             (None, None, None) => Ok(StepLifecycle::NotRunnable(vec![self.input_md.clone()])),

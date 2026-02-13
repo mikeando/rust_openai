@@ -1,7 +1,7 @@
 use crate::steps::rebuild_outline_json::RebuildBookOutlineState;
 use crate::write_step_state_general;
 use crate::{
-    ProjectData, StepAction, StepFile, StepState, create_book_outline_tool, get_file_hash,
+    create_book_outline_tool, get_file_hash, ProjectData, StepAction, StepFile, StepState,
 };
 use rust_openai::types::{ChatRequest, Message, ModelId};
 
@@ -29,7 +29,7 @@ impl StepAction for BookStatement {
         Ok(vec!["book_highlevel.txt".to_string()])
     }
 
-    fn execute(&self, key: &str, proj: &mut ProjectData) -> anyhow::Result<StepState> {
+    fn execute(&self, key: &str, proj: &ProjectData) -> anyhow::Result<StepState> {
         let model_id = ModelId::Gpt5Mini;
 
         let outline_tool = create_book_outline_tool();
@@ -42,13 +42,14 @@ impl StepAction for BookStatement {
             std::str::from_utf8(&content)?,
             "",
             "Only provide the chapter titles and subtitles in your response, other fields will be filled in later.",
-        ].join("\n");
+        ]
+        .join("\n");
         let request = outline_tool.create_request(
             ChatRequest::new(model_id, vec![Message::user_message(prompt)])
                 .with_instructions(proj.config.ai_instruction.clone()),
         );
 
-        let args = request.make_request(&mut proj.llm)?;
+        let args = request.make_request(&proj.llm)?;
         // write the outline to file as markdown, and as JSON
 
         let outline_markdown = args.render_to_markdown();
