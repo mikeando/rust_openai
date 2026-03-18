@@ -2,7 +2,7 @@
 
 This is a Rust client for the OpenAI API. It is currently under development and supports the following features:
 
-- GPT-5 models
+- GPT-5 and GPT-5.4 models
 - The Responses API
 - Tool calling
 
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut llm = OpenAILLM::with_defaults(&openai_api_key).await?;
 
     let request: ChatRequest = ChatRequest::new(
-        ModelId::Gpt5Mini,
+        ModelId::Gpt54Mini(None),
         vec![
             Message::user_message("Hello!"),
         ],
