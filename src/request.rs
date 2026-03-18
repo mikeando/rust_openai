@@ -219,7 +219,7 @@ mod tests {
         let fs = Arc::new(Mutex::new(fs));
         let cache = DefaultRequestCache::new(fs, root.to_path_buf())?;
 
-        let request = ChatRequest::new(ModelId::Gpt5(None), vec![Message::user_message("hello")]);
+        let request = ChatRequest::new(ModelId::Gpt54Nano(None), vec![Message::user_message("hello")]);
 
         let mut context = GeneratorContext::new();
         let mut response = ChatCompletionObject::gen(&mut context);

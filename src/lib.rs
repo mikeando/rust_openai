@@ -18,12 +18,12 @@ mod tests {
     #[test]
     fn request_to_string() {
         let request: ChatRequest =
-            ChatRequest::new(ModelId::Gpt5(None), vec![Message::user_message("Hello!")])
+            ChatRequest::new(ModelId::Gpt54Nano(None), vec![Message::user_message("Hello!")])
                 .with_instructions("You are a helpful assistant.".to_string());
 
         let expected = r#"
           {
-            "model": "gpt-5",
+            "model": "gpt-5.4-nano",
             "instructions": "You are a helpful assistant.",
             "input": [
               {
@@ -56,7 +56,7 @@ mod tests {
         });
 
         let request: ChatRequest = ChatRequest::new(
-            ModelId::Gpt5(None),
+            ModelId::Gpt54Nano(None),
             vec![Message::user_message("What is the weather like in Boston?")],
         )
         .with_tool_choice(ToolChoice::Auto)
@@ -68,7 +68,7 @@ mod tests {
 
         let expected = r#"
                     {
-                        "model": "gpt-5",
+                        "model": "gpt-5.4-nano",
                         "input": [
                             {
                                 "role": "user",
