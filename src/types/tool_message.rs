@@ -5,8 +5,8 @@ use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolMessage {
-    content: String,
-    tool_call_id: String,
+    pub content: String,
+    pub tool_call_id: String,
 }
 impl ToJson for ToolMessage {
     fn to_json(&self) -> serde_json::Value {

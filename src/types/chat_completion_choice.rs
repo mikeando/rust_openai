@@ -13,6 +13,7 @@ pub struct ChatCompletionChoice {
     pub content: Option<serde_json::Value>,
     pub summary: Option<serde_json::Value>,
     pub role: Option<String>,
+    pub r#type: Option<String>,
     // Add other fields as needed for reasoning, etc.
 }
 
@@ -40,6 +41,10 @@ impl FromJson for ChatCompletionChoice {
             summary: v.get("summary").cloned(),
             role: v
                 .get("role")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            r#type: v
+                .get("type")
                 .and_then(|x| x.as_str())
                 .map(|s| s.to_string()),
         })
@@ -88,6 +93,7 @@ impl Generatable for ChatCompletionChoice {
             content: Some(json!("Hello!")),
             summary: Some(json!([])),
             role: Some("assistant".to_string()),
+            r#type: None,
         }
     }
 }
