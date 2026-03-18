@@ -7,6 +7,9 @@ use serde_json::json;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ModelId {
+    Gpt54(Option<String>),
+    Gpt54Mini(Option<String>),
+    Gpt54Nano(Option<String>),
     Gpt51(Option<String>),
     Gpt5(Option<String>),
     Gpt5Mini(Option<String>),
@@ -16,6 +19,9 @@ pub enum ModelId {
 impl ModelId {
     pub fn name(&self) -> String {
         match self {
+            ModelId::Gpt54(tag) => Self::with_tag("gpt-5.4", tag),
+            ModelId::Gpt54Mini(tag) => Self::with_tag("gpt-5.4-mini", tag),
+            ModelId::Gpt54Nano(tag) => Self::with_tag("gpt-5.4-nano", tag),
             ModelId::Gpt51(tag) => Self::with_tag("gpt-5.1", tag),
             ModelId::Gpt5(tag) => Self::with_tag("gpt-5", tag),
             ModelId::Gpt5Mini(tag) => Self::with_tag("gpt-5-mini", tag),
@@ -32,6 +38,9 @@ impl ModelId {
 
     pub fn values() -> Vec<ModelId> {
         vec![
+            ModelId::Gpt54(None),
+            ModelId::Gpt54Mini(None),
+            ModelId::Gpt54Nano(None),
             ModelId::Gpt51(None),
             ModelId::Gpt5(None),
             ModelId::Gpt5Mini(None),
@@ -40,7 +49,13 @@ impl ModelId {
     }
 
     pub fn from_str(name: &str) -> Result<ModelId, Error> {
-        if let Some(tag) = name.strip_prefix("gpt-5-mini") {
+        if let Some(tag) = name.strip_prefix("gpt-5.4-mini") {
+            Ok(ModelId::Gpt54Mini(Self::parse_tag(tag)))
+        } else if let Some(tag) = name.strip_prefix("gpt-5.4-nano") {
+            Ok(ModelId::Gpt54Nano(Self::parse_tag(tag)))
+        } else if let Some(tag) = name.strip_prefix("gpt-5.4") {
+            Ok(ModelId::Gpt54(Self::parse_tag(tag)))
+        } else if let Some(tag) = name.strip_prefix("gpt-5-mini") {
             Ok(ModelId::Gpt5Mini(Self::parse_tag(tag)))
         } else if let Some(tag) = name.strip_prefix("gpt-5-nano") {
             Ok(ModelId::Gpt5Nano(Self::parse_tag(tag)))
@@ -69,6 +84,21 @@ mod tests {
 
     #[test]
     fn test_model_id_name() {
+        assert_eq!(ModelId::Gpt54(None).name(), "gpt-5.4");
+        assert_eq!(
+            ModelId::Gpt54(Some("2026-03-05".to_string())).name(),
+            "gpt-5.4-2026-03-05"
+        );
+        assert_eq!(ModelId::Gpt54Mini(None).name(), "gpt-5.4-mini");
+        assert_eq!(
+            ModelId::Gpt54Mini(Some("2026-03-17".to_string())).name(),
+            "gpt-5.4-mini-2026-03-17"
+        );
+        assert_eq!(ModelId::Gpt54Nano(None).name(), "gpt-5.4-nano");
+        assert_eq!(
+            ModelId::Gpt54Nano(Some("2026-03-17".to_string())).name(),
+            "gpt-5.4-nano-2026-03-17"
+        );
         assert_eq!(ModelId::Gpt51(None).name(), "gpt-5.1");
         assert_eq!(
             ModelId::Gpt51(Some("2025".to_string())).name(),
@@ -87,6 +117,27 @@ mod tests {
 
     #[test]
     fn test_model_id_from_str() {
+        assert_eq!(ModelId::from_str("gpt-5.4").unwrap(), ModelId::Gpt54(None));
+        assert_eq!(
+            ModelId::from_str("gpt-5.4-2026-03-05").unwrap(),
+            ModelId::Gpt54(Some("2026-03-05".to_string()))
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5.4-mini").unwrap(),
+            ModelId::Gpt54Mini(None)
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5.4-mini-2026-03-17").unwrap(),
+            ModelId::Gpt54Mini(Some("2026-03-17".to_string()))
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5.4-nano").unwrap(),
+            ModelId::Gpt54Nano(None)
+        );
+        assert_eq!(
+            ModelId::from_str("gpt-5.4-nano-2026-03-17").unwrap(),
+            ModelId::Gpt54Nano(Some("2026-03-17".to_string()))
+        );
         assert_eq!(ModelId::from_str("gpt-5.1").unwrap(), ModelId::Gpt51(None));
         assert_eq!(
             ModelId::from_str("gpt-5.1-2025").unwrap(),
@@ -120,6 +171,10 @@ mod tests {
     #[test]
     fn test_model_id_round_trip() {
         let models = vec![
+            ModelId::Gpt54(None),
+            ModelId::Gpt54(Some("2026-03-05".to_string())),
+            ModelId::Gpt54Mini(None),
+            ModelId::Gpt54Nano(None),
             ModelId::Gpt51(None),
             ModelId::Gpt51(Some("2025".to_string())),
             ModelId::Gpt5(None),
@@ -153,10 +208,13 @@ impl Generatable for ModelId {
         } else {
             None
         };
-        match context.rng.gen_range(0..4) {
-            0 => ModelId::Gpt51(tag),
-            1 => ModelId::Gpt5(tag),
-            2 => ModelId::Gpt5Mini(tag),
+        match context.rng.gen_range(0..7) {
+            0 => ModelId::Gpt54(tag),
+            1 => ModelId::Gpt54Mini(tag),
+            2 => ModelId::Gpt54Nano(tag),
+            3 => ModelId::Gpt51(tag),
+            4 => ModelId::Gpt5(tag),
+            5 => ModelId::Gpt5Mini(tag),
             _ => ModelId::Gpt5Nano(tag),
         }
     }
