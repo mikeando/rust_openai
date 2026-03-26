@@ -56,6 +56,10 @@ impl ToJson for Message {
 
 impl FromJson for Message {
     fn from_json(v: &serde_json::Value) -> Result<Message, Error> {
+        // Responses API tool result format uses type:"function_call_output", no role field
+        if v["type"].as_str() == Some("function_call_output") {
+            return Ok(Message::ToolMessage(ToolMessage::from_json(v)?));
+        }
         match v["role"].as_str() {
             Some("assistant") => Ok(Message::AssistantMessage(AssistantMessage::from_json(v)?)),
             Some("user") => Ok(Message::UserMessage(UserMessage::from_json(v)?)),

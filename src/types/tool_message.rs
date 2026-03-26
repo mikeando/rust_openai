@@ -10,20 +10,27 @@ pub struct ToolMessage {
 }
 impl ToJson for ToolMessage {
     fn to_json(&self) -> serde_json::Value {
+        // Responses API format: function_call_output item (not role:"tool")
         json!({
-            "role": "tool",
-            "content": self.content,
-            "tool_call_id": self.tool_call_id,
+            "type": "function_call_output",
+            "call_id": self.tool_call_id,
+            "output": self.content,
         })
     }
 }
 
 impl FromJson for ToolMessage {
     fn from_json(v: &serde_json::Value) -> Result<Self, Error> {
-        Ok(ToolMessage {
-            content: v["content"].as_str().unwrap().to_string(),
-            tool_call_id: v["tool_call_id"].as_str().unwrap().to_string(),
-        })
+        // Support both Responses API format (type/call_id/output) and legacy (role/tool_call_id/content)
+        let content = v["output"].as_str()
+            .or_else(|| v["content"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let tool_call_id = v["call_id"].as_str()
+            .or_else(|| v["tool_call_id"].as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok(ToolMessage { content, tool_call_id })
     }
 }
 

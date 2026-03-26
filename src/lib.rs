@@ -371,11 +371,11 @@ mod tests {
     }
 
     #[test]
-    pub fn tool_message_json_has_correct_role() {
+    pub fn tool_message_json_has_correct_type() {
         property_test(|m: &ToolMessage| {
-            m.to_json()["role"]
+            m.to_json()["type"]
                 .as_str()
-                .map(|r| r == "tool")
+                .map(|t| t == "function_call_output")
                 .unwrap_or(false)
         })
     }
