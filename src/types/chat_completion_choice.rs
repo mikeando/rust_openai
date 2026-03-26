@@ -6,6 +6,8 @@ use serde_json::json;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatCompletionChoice {
     pub id: Option<String>,
+    /// Responses API: the call reference ID used in function_call_output (distinct from `id`)
+    pub call_id: Option<String>,
     pub output_type: Option<String>,
     pub status: Option<String>,
     pub name: Option<String>,
@@ -21,6 +23,7 @@ impl FromJson for ChatCompletionChoice {
     fn from_json(v: &serde_json::Value) -> Result<ChatCompletionChoice, Error> {
         Ok(ChatCompletionChoice {
             id: v.get("id").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            call_id: v.get("call_id").and_then(|x| x.as_str()).map(|s| s.to_string()),
             output_type: v
                 .get("type")
                 .and_then(|x| x.as_str())
@@ -86,6 +89,7 @@ impl Generatable for ChatCompletionChoice {
     fn gen(context: &mut GeneratorContext) -> Self {
         ChatCompletionChoice {
             id: Some(String::gen(context)),
+            call_id: Some(String::gen(context)),
             output_type: Some("function_call".to_string()),
             status: Some("completed".to_string()),
             name: Some("test_function".to_string()),
