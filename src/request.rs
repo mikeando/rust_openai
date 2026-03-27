@@ -79,7 +79,6 @@ impl RawRequester for OpenAIRawRequester {
         };
 
         let response_text = response.into_string()?;
-        println!("DEBUG: Raw OpenAI response JSON: {}", response_text);
         let v: serde_json::Value = serde_json::from_str(&response_text)?;
         let response: ChatCompletionObject = ChatCompletionObject::from_json(&v)
             .map_err(|e| anyhow!("Error decoding openai response: {:?}", e))?;
