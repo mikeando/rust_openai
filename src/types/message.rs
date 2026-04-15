@@ -1,7 +1,7 @@
 use crate::generate::{Generatable, GeneratorContext};
 use crate::json::{FromJson, ToJson};
 use crate::types::Error;
-use crate::types::{AssistantMessage, ToolMessage, UserMessage};
+use crate::types::{AssistantMessage, FunctionCallItem, ToolMessage, UserMessage};
 use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,6 +9,10 @@ pub enum Message {
     UserMessage(UserMessage),
     AssistantMessage(AssistantMessage),
     ToolMessage(ToolMessage),
+    /// Responses API `function_call` input item — used to replay a previous
+    /// tool invocation in history. Each call is a separate item (not nested
+    /// inside an AssistantMessage).
+    FunctionCallItem(FunctionCallItem),
 }
 
 impl Message {
@@ -17,6 +21,7 @@ impl Message {
             Message::UserMessage(_) => "user".to_string(),
             Message::AssistantMessage(_) => "assistant".to_string(),
             Message::ToolMessage(_) => "tool".to_string(),
+            Message::FunctionCallItem(_) => "function_call".to_string(),
         }
     }
 
@@ -50,15 +55,21 @@ impl ToJson for Message {
             Message::UserMessage(m) => m.to_json(),
             Message::AssistantMessage(m) => m.to_json(),
             Message::ToolMessage(m) => m.to_json(),
+            Message::FunctionCallItem(m) => m.to_json(),
         }
     }
 }
 
 impl FromJson for Message {
     fn from_json(v: &serde_json::Value) -> Result<Message, Error> {
-        // Responses API tool result format uses type:"function_call_output", no role field
-        if v["type"].as_str() == Some("function_call_output") {
-            return Ok(Message::ToolMessage(ToolMessage::from_json(v)?));
+        match v["type"].as_str() {
+            Some("function_call_output") => {
+                return Ok(Message::ToolMessage(ToolMessage::from_json(v)?));
+            }
+            Some("function_call") => {
+                return Ok(Message::FunctionCallItem(FunctionCallItem::from_json(v)?));
+            }
+            _ => {}
         }
         match v["role"].as_str() {
             Some("assistant") => Ok(Message::AssistantMessage(AssistantMessage::from_json(v)?)),
@@ -85,6 +96,12 @@ impl From<UserMessage> for Message {
 impl From<ToolMessage> for Message {
     fn from(value: ToolMessage) -> Self {
         Message::ToolMessage(value)
+    }
+}
+
+impl From<FunctionCallItem> for Message {
+    fn from(value: FunctionCallItem) -> Self {
+        Message::FunctionCallItem(value)
     }
 }
 
