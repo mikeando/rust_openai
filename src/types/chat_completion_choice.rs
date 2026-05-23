@@ -3,7 +3,7 @@ use crate::json::{FromJson, ToJson};
 use crate::types::Error;
 use serde_json::json;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ChatCompletionChoice {
     pub id: Option<String>,
     /// Responses API: the call reference ID used in function_call_output (distinct from `id`)
@@ -15,8 +15,6 @@ pub struct ChatCompletionChoice {
     pub content: Option<serde_json::Value>,
     pub summary: Option<serde_json::Value>,
     pub role: Option<String>,
-    pub r#type: Option<String>,
-    // Add other fields as needed for reasoning, etc.
 }
 
 impl FromJson for ChatCompletionChoice {
@@ -46,10 +44,6 @@ impl FromJson for ChatCompletionChoice {
                 .get("role")
                 .and_then(|x| x.as_str())
                 .map(|s| s.to_string()),
-            r#type: v
-                .get("type")
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string()),
         })
     }
 }
@@ -59,6 +53,9 @@ impl ToJson for ChatCompletionChoice {
         let mut v = serde_json::Map::new();
         if let Some(id) = &self.id {
             v.insert("id".to_string(), json!(id));
+        }
+        if let Some(call_id) = &self.call_id {
+            v.insert("call_id".to_string(), json!(call_id));
         }
         if let Some(output_type) = &self.output_type {
             v.insert("type".to_string(), json!(output_type));
@@ -97,7 +94,6 @@ impl Generatable for ChatCompletionChoice {
             content: Some(json!("Hello!")),
             summary: Some(json!([])),
             role: Some("assistant".to_string()),
-            r#type: None,
         }
     }
 }
