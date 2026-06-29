@@ -8,7 +8,7 @@ use crate::{
 use rand::Rng;
 use serde_json::{json, Value};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct ChatCompletionObject {
     pub id: String,
     pub object: String,

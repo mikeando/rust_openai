@@ -13,6 +13,12 @@ pub enum ModelId {
     Gpt5Nano(Option<String>),
 }
 
+impl Default for ModelId {
+    fn default() -> Self {
+        ModelId::Gpt5Nano(None)
+    }
+}
+
 impl ModelId {
     pub fn name(&self) -> String {
         match self {

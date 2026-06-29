@@ -4,7 +4,7 @@ use crate::types::Error;
 use rand::Rng;
 use serde_json::json;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct UsageStats {
     pub input_tokens: u32,
     pub input_tokens_details: Option<InputTokensDetails>,
